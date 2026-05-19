@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brake Discs Store</title>
+  <meta name="description" content="Интернет‑магазин тормозных дисков для мотоциклов. Фильтрация по брендам, быстрый поиск, современный дизайн." />
+  <link rel="stylesheet" href="/style.css?v=7" />
+</head>
+<body>
+  <!-- Toast Notification Overlay -->
+  <div id="toastNotification" class="toast-notification">
+    <span id="toastIcon">🔔</span>
+    <span id="toastText">Уведомление</span>
+  </div>
+
+  <!-- Auth Modal -->
+  <div class="modal" id="loginModal" style="display:none;">
+    <div class="modal-content">
+      <div class="auth-tabs">
+        <button id="tabLogin" class="auth-tab active">Вход</button>
+        <button id="tabRegister" class="auth-tab">Регистрация</button>
+      </div>
+      <form id="authForm" class="auth-form">
+        <input type="text" id="loginUsername" placeholder="Имя пользователя" required />
+        <input type="password" id="loginPassword" placeholder="Пароль" required />
+        <button type="submit" id="authBtn">Войти</button>
+      </form>
+      <button id="closeAuthBtn" style="margin-top:1rem; background:transparent; color:var(--color-text); border:1px solid var(--color-muted); padding:0.4rem; border-radius:var(--radius); width:100%; cursor:pointer;">Закрыть</button>
+    </div>
+  </div>
+
+  <!-- Ask Question Modal -->
+  <div class="modal" id="askModal" style="display:none;">
+    <div class="modal-content">
+      <h2 style="color:var(--color-primary-start);" id="askModalTitle">Задать вопрос</h2>
+      <p id="askWarning" style="color:#ff5555; display:none; margin-bottom:1rem;">Пожалуйста, войдите в профиль или зарегистрируйтесь, чтобы задать вопрос.</p>
+      <form id="askForm" style="display:flex; flex-direction:column; gap:1rem;">
+        <div id="mfgSelectWrapper" style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:#aaa;" id="lblAskMfg">Кому задать вопрос (Производитель)</label>
+          <select id="askManufacturer" required style="padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); font-family:inherit;">
+            <option value="BrakeDiscs Official">BrakeDiscs Official</option>
+          </select>
+        </div>
+        <textarea id="askText" placeholder="Напишите ваш вопрос здесь..." required style="min-height:100px; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); font-family:inherit;"></textarea>
+        <button type="submit" id="submitAskBtn" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:0.6rem; border-radius:var(--radius); cursor:pointer; font-weight:bold;">Отправить</button>
+        <button type="button" id="closeAskBtn" style="background:transparent; color:var(--color-text); border:1px solid var(--color-muted); padding:0.4rem; border-radius:var(--radius); cursor:pointer;">Отмена</button>
+      </form>
+    </div>
+  </div>
+
+  <header class="header">
+    <div style="display:flex; align-items:center; gap:0.5rem;">
+      <h1 class="logo">🏍️ MotoBrake <span class="logo-sub">Discs</span></h1>
+    </div>
+    <nav class="nav" style="margin-left:auto;">
+      <a href="#" class="nav-link" id="homeLink">Главная</a>
+      <a href="#" class="nav-link" id="customDiscsLink" style="color:var(--color-primary-start);">Диски на заказ</a>
+      <a href="/admin.html" class="nav-link admin-link" id="topAdminLink" style="display:none; color:#ffb300; font-weight:bold;">Склад</a>
+      <button class="nav-link" id="askQuestionBtn" style="background:none; border:1px solid var(--color-primary-start); color:#fff; cursor:pointer; border-radius:var(--radius); padding:0.4rem 0.8rem;">Задать вопрос</button>
+      <a href="#" class="nav-link" id="searchLink" style="display:none;">Поиск</a>
+      <button class="nav-link" id="cartToggle" title="Корзина" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer;">🛒</button>
+      
+      <!-- Point 9: Language switch adjecent to user menu -->
+      <button id="langToggle" style="background:none; border:none; font-size:1.4rem; cursor:pointer; padding:0 0.2rem;" title="Сменить язык">🇷🇺</button>
+      
+      <!-- User Menu -->
+      <div class="user-menu">
+        <button id="userMenuBtn" title="Профиль" style="background:none; border:none; color:#fff; font-size:1rem; cursor:pointer; display:flex; align-items:center; gap:0.4rem; font-weight:bold;">
+          <span id="userMenuText">Войти</span>
+          <span style="font-size:1.2rem;">👤</span>
+        </button>
+        <div id="userDropdown" class="user-dropdown" style="display:none;">
+          <div id="userInfo" class="dropdown-header" style="display:none;">Привет, Гость</div>
+          <button id="openLoginBtn" class="dropdown-item">Войти / Регистрация</button>
+          <a href="/account.html" class="dropdown-item" id="accountNav" style="display:none;">Личный кабинет</a>
+          <a href="/admin.html" class="dropdown-item admin-link" id="adminNav" style="display:none;">Склад</a>
+          <button id="logoutBtn" class="dropdown-item" style="display:none; text-align:left;">Выход</button>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Cart Drawer -->
+  <div id="cartDrawer" class="cart-drawer">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.8rem; margin-bottom:1rem;">
+      <h3 id="cartDrawerTitle" style="margin:0; color:var(--color-primary-start); font-size:1.4rem; font-weight:800;">Корзина</h3>
+      <button id="closeCartBtn" style="background:none; border:none; color:var(--color-primary-start); font-size:1.5rem; cursor:pointer; font-weight:bold; padding:0.2rem 0.5rem; transition:var(--transition);" title="Закрыть">➔</button>
+    </div>
+    <div id="cartItems" class="cart-items"></div>
+    <div class="cart-total"><span id="lblCartTotal">Итого</span>: <span id="cartTotal">$0.00</span></div>
+    <a href="checkout.html" class="checkout-btn" id="btnGoCheckout">Оформить заказ</a>
+  </div>
+
+  <main class="main">
+    <!-- Brand filter row -->
+    <section class="brand-filter" id="brandFilter">
+      <!-- Dynamic brand buttons inserted by app.js -->
+    </section>
+
+    <!-- Point 2: Manufacturer filter row with "Все" button -->
+    <div style="margin-bottom:0.5rem; font-size:0.9rem; color:#aaa; font-weight:bold;" id="lblMfgTitle">Производители:</div>
+    <section class="brand-filter" id="manufacturerFilter" style="margin-bottom:1.5rem;">
+      <!-- Dynamic manufacturer buttons inserted by app.js -->
+    </section>
+
+    <section class="search-section" id="searchSection" style="margin: 1rem auto; max-width: 600px; padding: 0 1rem; display:flex; width:100%;">
+      <div style="position:relative; width:100%;">
+        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#888;">🔍</span>
+        <input type="text" id="searchInput" placeholder="Поиск товаров (например, Yamaha R1)..." style="width:100%; padding:0.8rem 1rem 0.8rem 2.5rem; border-radius:25px; border:1px solid #444; background:var(--color-surface); color:#fff; font-size:1rem; box-sizing:border-box; box-shadow:0 2px 10px rgba(0,0,0,0.2); outline:none;" />
+      </div>
+    </section>
+    <section class="product-grid" id="productGrid">
+      <!-- Product cards inserted by app.js -->
+    </section>
+  </main>
+
+  <!-- Point 12: Premium Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-col">
+        <h4 id="footerAboutTitle">О нас</h4>
+        <p id="footerAboutDesc">Brake Discs Store — премиальный производитель и дистрибьютор тормозных дисков для спортивных и дорожных мотоциклов. Высокое качество, износостойкость и надежность на любых треках.</p>
+      </div>
+      <div class="footer-col">
+        <h4 id="footerLinksTitle">Разделы</h4>
+        <ul>
+          <li><a href="#" id="footHome">Главная</a></li>
+          <li><a href="#" id="footCustom">Диски на заказ</a></li>
+          <li><a href="#" id="footAsk" onclick="document.getElementById('askQuestionBtn').click(); return false;">Задать вопрос</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4 id="footerArticlesTitle">Статьи</h4>
+        <ul id="footerArticlesList">
+          <!-- Populated dynamically by app.js from superadmin settings -->
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4 id="footerContactTitle">Контакты</h4>
+        <p id="footerContactEmail">Наша почта: <span id="siteEmail" style="color:var(--color-primary-start); font-weight:bold;">support@brakediscs.com</span></p>
+        <p style="margin-top:1.5rem; font-size:0.8rem; color:#666;">© 2026 MotoBrake. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="/app.js?v=5"></script>
+</body>
+</html>

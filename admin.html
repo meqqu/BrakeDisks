@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Склад – Brake Discs Store (Owner)</title>
+  <meta name="description" content="Панель управления складом для интернет‑магазина тормозных дисков. Добавление, редактирование и удаление товаров, поиск по таблице." />
+  <link rel="stylesheet" href="style.css?v=7" />
+</head>
+<body>
+  <!-- Toast Notification Overlay -->
+  <div id="toastNotification" class="toast-notification">
+    <span id="toastIcon">🔔</span>
+    <span id="toastText">Уведомление</span>
+  </div>
+
+  <header class="header">
+    <h1 class="logo">⚙️ Панель Управления</h1>
+    <nav class="nav">
+      <a href="/index.html" class="nav-link" id="backToStore">← Вернуться в магазин</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <section class="admin-section" id="adminSection">
+      <!-- Superadmin Panel Filter -->
+      <div id="superadminManufacturerFilter" style="display:none; align-items:center; gap:0.5rem; margin-bottom:1.5rem; padding:1rem; background:var(--color-surface); border-radius:var(--radius); border-left:4px solid var(--color-primary-start);">
+        <label style="font-weight:bold; color:var(--color-primary-start);">Панель Суперпользователя: </label>
+        <select id="superadminManufacturerSelect" style="padding:0.5rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text);">
+          <option value="all">Все производители</option>
+        </select>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div style="margin-bottom:1.5rem; display:flex; gap:0.8rem; flex-wrap:wrap;">
+        <button id="showProductsBtn" class="brand-btn active">Товары</button>
+        <button id="showQuestionsBtn" class="brand-btn">Вопросы от юзеров</button>
+        <button id="showOrdersBtn" class="brand-btn">Заказы</button>
+        <button id="showExcelBtn" class="brand-btn" style="color:var(--color-primary-start);">📊 Excel Заказы</button>
+        <button id="showAiAnalyticsBtn" class="brand-btn" style="border:1px solid #00b0ff; color:#00b0ff;">🧠 Аналитика ИИ</button>
+        
+        <!-- Manufacturer tab -->
+        <button id="showMfgInfoBtn" class="brand-btn" style="display:none; border: 1px solid var(--color-primary-start);">🏭 Мое Производство</button>
+        
+        <!-- Superadmin Tabs -->
+        <button id="showProducersBtn" class="brand-btn" style="display:none; border: 1px dashed var(--color-primary-start);">🏭 Производители</button>
+        <button id="showSettingsBtn" class="brand-btn" style="display:none; border: 1px dashed #00e676;">⚙️ Настройки Сайта</button>
+      </div>
+
+      <!-- 1. Products Tab -->
+      <div id="productsTab">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+          <h2>Управление товарами</h2>
+          <button id="openAddProductModalBtn" style="padding:0.6rem 1.2rem; background:var(--color-primary-start); color:#fff; border:none; border-radius:var(--radius); cursor:pointer; font-weight:bold;">+ Добавить товар</button>
+        </div>
+        <datalist id="brandDatalist"></datalist>
+
+        <input type="text" id="adminSearch" placeholder="Поиск в таблице..." style="margin-top:1rem; padding:0.6rem; width:100%; max-width:300px; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:#fff;" />
+
+        <table class="admin-table" id="productTable">
+          <thead>
+            <tr>
+              <th>Название</th>
+              <th>Бренд</th>
+              <th>Наличие</th>
+              <th>Цена</th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <!-- Rows injected by admin.js -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 2. Support Chats Tab -->
+      <div id="questionsTab" style="display:none; height:600px;">
+        <div style="display:flex; height:100%; gap:1rem; margin-top:1rem;">
+          <!-- Dialogs List -->
+          <div style="flex:1; background:var(--color-surface); border-radius:var(--radius); box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,0.05);">
+            <div style="background:var(--color-primary-start); padding:1rem; font-weight:bold; color:#fff;">Диалоги с клиентами</div>
+            <div id="dialogsList" style="flex:1; overflow-y:auto; padding:0;">
+              <!-- Dialog items injected by admin.js -->
+            </div>
+          </div>
+          
+          <!-- Chat Window -->
+          <div id="adminChatContainer" style="flex:2; background:var(--color-surface); border-radius:var(--radius); box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,0.05); visibility:hidden;">
+            <div style="background:#1f2438; padding:1rem; font-weight:bold; color:#fff; display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,0.08);">
+              <span id="activeChatUser">Выберите диалог</span>
+            </div>
+            <div id="adminChatMessages" style="flex:1; overflow-y:auto; padding:1rem; display:flex; flex-direction:column; gap:1rem; background:rgba(0,0,0,0.2);">
+              <!-- Chat messages injected here -->
+            </div>
+            <form id="adminChatForm" style="display:flex; align-items:center; padding:1rem; background:var(--color-surface); border-top:1px solid var(--color-muted); gap:0.5rem;">
+              <label style="cursor:pointer; padding:0.6rem; font-size:1.3rem; color:#aaa; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); border:1px solid var(--color-muted); border-radius:var(--radius); transition:var(--transition); margin:0;" title="Прикрепить фото">
+                📎
+                <input type="file" id="adminChatFile" accept="image/*,application/pdf" style="display:none;" />
+              </label>
+              <input type="text" id="adminChatInput" placeholder="Сообщение клиенту..." required style="flex:1; padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text);" />
+              <button type="submit" style="background:var(--color-primary-start); color:#fff; border:none; padding:0.8rem 1.5rem; border-radius:var(--radius); cursor:pointer; font-weight:bold;">Отправить</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Orders Tab -->
+      <div id="ordersTab" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:1rem;">
+          <h2>Заказы</h2>
+          <div style="display:flex; gap:0.5rem;">
+            <button id="addOrderColBtn" style="padding:0.6rem 1rem; border-radius:var(--radius); background:#444; color:#fff; border:none; cursor:pointer; font-weight:bold;">+ Столбец</button>
+            <button id="addManualOrderBtn" style="padding:0.6rem 1rem; border-radius:var(--radius); background:var(--color-primary-start); color:#fff; border:none; cursor:pointer; font-weight:bold;">+ Ручной заказ</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="admin-table" id="ordersTable">
+            <thead>
+              <tr id="ordersTableHeader">
+                <th>№</th>
+                <th>Дата</th>
+                <th>Клиент</th>
+                <th>Сумма</th>
+                <th>Статус</th>
+                <!-- Custom columns injected here -->
+                <th>Действие</th>
+              </tr>
+            </thead>
+            <tbody id="ordersTableBody">
+              <!-- Orders injected by admin.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 4. Point 14: Interactive Excel Tab Section -->
+      <div id="excelTab" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:1rem;">
+          <div>
+            <h2 style="color:var(--color-primary-start);">📊 Редактор Excel (Заказы)</h2>
+            <p style="font-size:0.85rem; color:#aaa;">Интерактивная таблица Excel. Вы можете редактировать ячейки, растягивать столбцы и использовать формулы, например: <code>=SUM(D1:D10)</code>.</p>
+          </div>
+          <button id="syncExcelBtn" style="padding:0.6rem 1.2rem; border:none; border-radius:var(--radius); font-weight:bold; cursor:pointer; background:linear-gradient(135deg, #43a047, #2e7d32); color:#fff; transition:var(--transition);">🔄 Синхронизировать с Базой</button>
+        </div>
+
+        <!-- Sleek Excel Formatting and Formula Toolbar -->
+        <div class="excel-toolbar" style="display:flex; gap:0.5rem; align-items:center; background:var(--color-surface); padding:0.6rem 1rem; border-radius:var(--radius); margin-bottom:0.8rem; border:1px solid rgba(255,255,255,0.05); flex-wrap:wrap;">
+          <!-- Quick Formulas -->
+          <span style="font-size:0.85rem; color:#aaa; font-weight:bold; margin-right:0.3rem;">Формулы:</span>
+          <button id="excelFormulaSum" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#444; border:none; color:#fff; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85rem;" title="Сумма ячеек: =SUM(D1:D5)">Σ SUM</button>
+          <button id="excelFormulaAvg" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#444; border:none; color:#fff; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85rem;" title="Среднее значение: =AVERAGE(D1:D5)">Avg AVERAGE</button>
+          <button id="excelFormulaMin" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#444; border:none; color:#fff; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85rem;" title="Минимум: =MIN(D1:D5)">Min MIN</button>
+          <button id="excelFormulaMax" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#444; border:none; color:#fff; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85rem;" title="Максимум: =MAX(D1:D5)">Max MAX</button>
+          
+          <div style="width:1px; height:20px; background:#444; margin:0 0.3rem;"></div>
+          
+          <!-- History Actions -->
+          <button id="excelUndoBtn" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#444; border:none; color:#fff; border-radius:4px; cursor:pointer;" title="Отменить последнее действие (Ctrl+Z)">↩️</button>
+          <button id="excelRedoBtn" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#444; border:none; color:#fff; border-radius:4px; cursor:pointer;" title="Повторить действие (Ctrl+Y)">↪️</button>
+          
+          <div style="width:1px; height:20px; background:#444; margin:0 0.3rem;"></div>
+          
+          <!-- Styling -->
+          <span style="font-size:0.85rem; color:#aaa; font-weight:bold; margin-right:0.3rem;">Стиль:</span>
+          <button id="excelFormatBold" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#444; border:none; color:#fff; border-radius:4px; cursor:pointer; font-weight:bold;">B</button>
+          <button id="excelFormatItalic" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#444; border:none; color:#fff; border-radius:4px; cursor:pointer; font-style:italic;">I</button>
+          <button id="excelFormatUnderline" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#444; border:none; color:#fff; border-radius:4px; cursor:pointer; text-decoration:underline;">U</button>
+          
+          <div style="width:1px; height:20px; background:#444; margin:0 0.3rem;"></div>
+          
+          <!-- Colors -->
+          <span style="font-size:0.85rem; color:#aaa; font-weight:bold; margin-right:0.3rem;">Фон:</span>
+          <select id="excelBgColor" style="padding:0.3rem; background:#444; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">
+            <option value="transparent">Без фона</option>
+            <option value="rgba(255, 23, 68, 0.2)">Красный</option>
+            <option value="rgba(0, 230, 118, 0.2)">Зеленый</option>
+            <option value="rgba(0, 176, 255, 0.2)">Синий</option>
+            <option value="rgba(255, 179, 0, 0.2)">Желтый</option>
+            <option value="rgba(213, 0, 249, 0.2)">Фиолетовый</option>
+            <option value="rgba(255, 145, 0, 0.2)">Оранжевый</option>
+            <option value="rgba(0, 191, 165, 0.2)">Бирюзовый</option>
+            <option value="rgba(245, 0, 87, 0.2)">Розовый</option>
+            <option value="#1c1c1e">Угольный</option>
+            <option value="#1d2440">Темно-синий</option>
+          </select>
+          
+          <span style="font-size:0.85rem; color:#aaa; font-weight:bold; margin-left:0.5rem; margin-right:0.3rem;">Текст:</span>
+          <select id="excelTextColor" style="padding:0.3rem; background:#444; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.85rem;">
+            <option value="#ffffff">Белый</option>
+            <option value="#ff1744">Красный</option>
+            <option value="#00e676">Зеленый</option>
+            <option value="#00b0ff">Синий</option>
+            <option value="#ffb300">Желтый</option>
+            <option value="#d500f9">Фиолетовый</option>
+            <option value="#f97316">Оранжевый</option>
+            <option value="#00e5ff">Бирюзовый</option>
+            <option value="#ff4081">Розовый</option>
+            <option value="#94a3b8">Серый</option>
+          </select>
+          
+          <div style="width:1px; height:20px; background:#444; margin:0 0.3rem;"></div>
+          
+          <!-- Add Column -->
+          <button id="excelAddColumnBtn" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); border:none; color:#fff; border-radius:4px; cursor:pointer; font-weight:bold; font-size:0.85rem;" title="Добавить новый столбец в Excel">➕ Добавить столбец</button>
+          
+          <div style="width:1px; height:20px; background:#444; margin:0 0.3rem;"></div>
+          
+          <!-- CSV Actions -->
+          <button id="excelExportCsvBtn" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#2e7d32; border:none; color:#fff; border-radius:4px; cursor:pointer; font-size:0.85rem; font-weight:bold; display:flex; align-items:center; gap:0.3rem;" title="Экспорт в CSV">📥 Экспорт CSV</button>
+          <button id="excelImportCsvBtn" class="toolbar-btn" style="padding:0.3rem 0.6rem; background:#00b0ff; border:none; color:#fff; border-radius:4px; cursor:pointer; font-size:0.85rem; font-weight:bold; display:flex; align-items:center; gap:0.3rem;" title="Импорт из CSV">📤 Импорт CSV</button>
+          <input type="file" id="excelCsvFileInput" accept=".csv" style="display:none;" />
+          
+          <select id="excelDataSource" style="display:none;">
+            <option value="orders" selected>Заказы</option>
+            <option value="products">Товары на складе</option>
+          </select>
+        </div>
+
+        <!-- Sleek Excel Formula Bar -->
+        <div class="excel-formula-bar" style="display:flex; align-items:center; background:#161a29; border:1px solid #2b3040; border-radius:6px; padding:0.5rem 0.8rem; gap:0.5rem; margin-bottom:0.8rem;">
+          <span style="font-family:monospace; font-weight:bold; color:var(--color-primary-start); font-size:1.15rem; user-select:none; margin-right:0.2rem;">fx</span>
+          <div id="excelActiveCellId" style="font-family:monospace; font-weight:bold; color:#888; background:#0f111a; padding:0.2rem 0.6rem; border-radius:4px; min-width:40px; text-align:center; border:1px solid #2b3040; user-select:none;">-</div>
+          <input type="text" id="excelFormulaInput" placeholder="Выберите ячейку и введите значение или формулу (например: =SUM(D1:D5) или =PRODUCT(D1:D2))" style="flex:1; background:transparent; border:none; color:#fff; font-family:monospace; font-size:0.9rem; outline:none;" />
+        </div>
+
+        <!-- Sheets Navigation Tabs -->
+        <div class="excel-sheets-tabs" id="excelSheetsTabsContainer" style="display:flex; background:#0f111a; border-radius:8px 8px 0 0; border:1px solid #2b3040; border-bottom:none; width:fit-content; margin-bottom:-1px; position:relative; z-index:5; align-items:center;">
+          <button type="button" class="excel-sheet-tab active" data-source="orders" style="padding:0.6rem 1.2rem; font-weight:bold; font-size:0.85rem; background:#1a1e2e; color:var(--color-primary-start); border:none; border-right:1px solid #2b3040; border-top:3px solid var(--color-primary-start); cursor:pointer; display:flex; align-items:center; gap:0.4rem; transition:var(--transition); outline:none;">📋 Лист 1: Заказы</button>
+          <button type="button" class="excel-sheet-tab" data-source="products" style="padding:0.6rem 1.2rem; font-weight:bold; font-size:0.85rem; background:#0f111a; color:#888; border:none; border-right:1px solid #2b3040; border-top:3px solid transparent; cursor:pointer; display:flex; align-items:center; gap:0.4rem; transition:var(--transition); outline:none;">📦 Лист 2: Склад товаров</button>
+          <!-- Custom sheets list will be dynamically rendered here -->
+          <button type="button" id="excelAddSheetBtn" style="padding:0.6rem 1rem; font-weight:bold; font-size:1.15rem; background:#0f111a; color:#888; border:none; cursor:pointer; outline:none; border-top:3px solid transparent; display:flex; align-items:center; justify-content:center; transition:var(--transition); margin-bottom:-1px;" title="Создать новый лист">➕</button>
+        </div>
+        
+
+        
+        <div class="excel-container" style="position:relative; border-top-left-radius:0;">
+          <!-- Classic Selection Overlay -->
+          <div id="excelSelectionOverlay" style="display:none; position:absolute; box-sizing:border-box; border:2px solid var(--color-primary-start); pointer-events:none; z-index:50;">
+            <div class="excel-sel-edge" draggable="true" style="position:absolute; top:-4px; left:-4px; right:-4px; height:8px; cursor:grab; pointer-events:auto;"></div>
+            <div class="excel-sel-edge" draggable="true" style="position:absolute; bottom:-4px; left:-4px; right:-4px; height:8px; cursor:grab; pointer-events:auto;"></div>
+            <div class="excel-sel-edge" draggable="true" style="position:absolute; top:-4px; bottom:-4px; left:-4px; width:8px; cursor:grab; pointer-events:auto;"></div>
+            <div class="excel-sel-edge" draggable="true" style="position:absolute; top:-4px; bottom:-4px; right:-4px; width:8px; cursor:grab; pointer-events:auto;"></div>
+            <div id="excelAutofillHandle" class="excel-autofill-handle" style="pointer-events:auto;" title="Протяните для автозаполнения формул"></div>
+          </div>
+          
+          <table class="excel-table" id="excelSpreadsheet">
+            <!-- Dynamically populated Excel cells by admin.js -->
+          </table>
+          
+          <!-- Formula Autocomplete Dropdown -->
+          <div id="excelFormulaSuggestions" style="display:none; position:absolute; background:#18181c; border:1px solid var(--color-primary-start); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.5); z-index:9000; max-height:220px; overflow-y:auto; width:250px; font-family:monospace; font-size:0.8rem; padding:0.5rem 0;">
+            <!-- Suggesions list -->
+          </div>
+        </div>
+
+        <!-- Excel Context Menu -->
+        <div id="excelContextMenu" style="display:none; position:fixed; z-index:9999; background:#161a29; border:1px solid #2b3040; border-radius:8px; box-shadow:0 10px 30px rgba(0,0,0,0.6); min-width:180px; padding:0.5rem 0;">
+          <div class="context-menu-item" id="ctxInsertColLeft" style="padding:0.6rem 1rem; color:#fff; cursor:pointer; font-size:0.85rem; display:none;">Вставить столбец слева</div>
+          <div class="context-menu-item" id="ctxInsertColRight" style="padding:0.6rem 1rem; color:#fff; cursor:pointer; font-size:0.85rem; display:none;">Вставить столбец справа</div>
+          <div class="context-menu-item" id="ctxDeleteCol" style="padding:0.6rem 1rem; color:#ff5252; cursor:pointer; font-size:0.85rem; display:none;">Удалить столбец</div>
+          <div class="context-menu-item" id="ctxRenameCol" style="padding:0.6rem 1rem; color:#fff; cursor:pointer; font-size:0.85rem; display:none;">Переименовать столбец</div>
+          <div class="context-menu-item" id="ctxInsertRowAbove" style="padding:0.6rem 1rem; color:#fff; cursor:pointer; font-size:0.85rem; display:none;">Вставить строку выше</div>
+          <div class="context-menu-item" id="ctxInsertRowBelow" style="padding:0.6rem 1rem; color:#fff; cursor:pointer; font-size:0.85rem; display:none;">Вставить строку ниже</div>
+          <div class="context-menu-item" id="ctxDeleteRow" style="padding:0.6rem 1rem; color:#ff5252; cursor:pointer; font-size:0.85rem; display:none;">Удалить строку</div>
+          <div class="context-menu-item" id="ctxRenameSheet" style="padding:0.6rem 1rem; color:#fff; cursor:pointer; font-size:0.85rem; display:none;">Переименовать лист</div>
+          <div class="context-menu-item" id="ctxDeleteSheet" style="padding:0.6rem 1rem; color:#ff5252; cursor:pointer; font-size:0.85rem; display:none;">Удалить лист</div>
+        </div>
+      </div>
+
+      <!-- 4.2. AI Analytics Tab -->
+      <div id="aiAnalyticsTab" style="display:none;">
+        <h2 style="color:#00b0ff; margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem;">🧠 Аналитика на основе ИИ</h2>
+        <p style="font-size:0.85rem; color:#aaa; margin-bottom:1.5rem;">Интеллектуальный анализ продаж, запасов и эффективности производства с графиками.</p>
+        
+        <!-- Interactive Graph Cards -->
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:1.5rem; margin-bottom:2rem;">
+          <div style="background:var(--color-surface); padding:1.5rem; border-radius:var(--radius); border:1px solid rgba(255,255,255,0.05); box-shadow:var(--shadow);">
+            <h4 style="color:#fff; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
+              <span>📈 Выручка по производителям</span>
+              <span style="font-size:0.75rem; color:#00b0ff;">SVG График</span>
+            </h4>
+            <div id="analyticsSalesChart" style="height:220px; display:flex; align-items:flex-end; justify-content:space-around; padding-top:1rem; border-bottom:1px solid #444; border-left:1px solid #444; position:relative; min-height:220px;">
+              <!-- Dynamically populated bars -->
+            </div>
+            <div id="analyticsSalesLegend" style="display:flex; justify-content:center; gap:1rem; margin-top:0.8rem; font-size:0.75rem; color:#aaa; flex-wrap:wrap;"></div>
+          </div>
+          
+          <div style="background:var(--color-surface); padding:1.5rem; border-radius:var(--radius); border:1px solid rgba(255,255,255,0.05); box-shadow:var(--shadow);">
+            <h4 style="color:#fff; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
+              <span>📦 Запас товаров по брендам</span>
+              <span style="font-size:0.75rem; color:#00b0ff;">Распределение</span>
+            </h4>
+            <div id="analyticsStockChart" style="height:220px; display:flex; align-items:flex-end; justify-content:space-around; padding-top:1rem; border-bottom:1px solid #444; border-left:1px solid #444; position:relative; min-height:220px;">
+              <!-- Dynamically populated bars -->
+            </div>
+            <div id="analyticsStockLegend" style="display:flex; justify-content:center; gap:1rem; margin-top:0.8rem; font-size:0.75rem; color:#aaa; flex-wrap:wrap;"></div>
+          </div>
+        </div>
+
+        <!-- AI Analyst Assistant Dialog Pane -->
+        <div style="background:var(--color-surface); padding:1.5rem; border-radius:var(--radius); border:1px solid rgba(0,176,255,0.25); box-shadow:0 0 20px rgba(0,176,255,0.05);">
+          <h3 style="color:#00b0ff; margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem;">🤖 Чат с ИИ-Аналитиком (DeepSeek / Gemini)</h3>
+          <div id="aiChatMessages" style="height:250px; overflow-y:auto; padding:1rem; background:rgba(0,0,0,0.2); border-radius:8px; border:1px solid #333; margin-bottom:1rem; display:flex; flex-direction:column; gap:0.8rem; font-size:0.9rem;">
+            <div style="align-self:flex-start; background:rgba(0,176,255,0.1); color:#fff; border:1px solid rgba(0,176,255,0.2); padding:0.6rem 1rem; border-radius:8px 8px 8px 0; max-width:80%;">
+              Привет! Я ваш ИИ-аналитик. Я могу проанализировать продажи на складе, оценить остатки товаров и выручку по производителям. Задайте мне любой вопрос, например: <strong>"Сделай общий анализ продаж"</strong> или <strong>"Какая мастерская лидирует?"</strong>.
+            </div>
+          </div>
+          <form id="aiChatForm" style="display:flex; gap:0.5rem;">
+            <input type="text" id="aiChatInput" placeholder="Спросите ИИ про продажи, выручку или склад..." required style="flex:1; padding:0.8rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff; font-family:inherit;" />
+            <button type="submit" style="background:linear-gradient(135deg, #00b0ff, #0081cb); color:#fff; border:none; padding:0.8rem 1.5rem; border-radius:var(--radius); cursor:pointer; font-weight:bold;">Анализ</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- 4.5. Manufacturer Info Tab -->
+      <div id="mfgInfoTab" style="display:none; max-width:700px;">
+        <h2 style="color:var(--color-primary-start); margin-bottom:1rem;">🏭 Информация о Производстве</h2>
+        <p style="font-size:0.85rem; color:#aaa; margin-bottom:1.5rem;">Настройте публичный профиль вашей мастерской. Эти данные увидят покупатели при просмотре ваших товаров.</p>
+        
+        <form id="mfgInfoForm" style="display:flex; flex-direction:column; gap:1.2rem; background:var(--color-surface); padding:2rem; border-radius:var(--radius); border:1px solid rgba(255,255,255,0.05);">
+          <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+            <div style="flex:1; min-width:250px; display:flex; flex-direction:column; gap:0.3rem;">
+              <label style="font-size:0.85rem; color:#aaa;">Название бренда / Мастерской</label>
+              <input type="text" id="mfgWorkshopName" readonly style="padding:0.8rem; border-radius:var(--radius); border:1px solid #444; background:rgba(0,0,0,0.3); color:#aaa; cursor:not-allowed;" />
+            </div>
+            <div style="flex:1; min-width:250px; display:flex; flex-direction:column; gap:0.3rem;">
+              <label style="font-size:0.85rem; color:#aaa;">Текущая загрузка производства</label>
+              <select id="mfgWorkload" style="padding:0.8rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff; height:45px;">
+                <option value="Низкая (1-2 дня)">Низкая (Отгрузка 1-2 дня)</option>
+                <option value="Средняя (3-5 дней)" selected>Средняя (Отгрузка 3-5 дней)</option>
+                <option value="Высокая (до 2 недель)">Высокая (Производство до 2 недель)</option>
+              </select>
+            </div>
+          </div>
+          
+          <div style="display:flex; flex-direction:column; gap:0.3rem;">
+            <label style="font-size:0.85rem; color:#aaa;">Описание мастерской и технологии</label>
+            <textarea id="mfgDescription" placeholder="Опишите ваши технологии производства дисков, используемые сплавы металлов..." style="padding:0.8rem; min-height:100px; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff; font-family:inherit;"></textarea>
+          </div>
+          
+          <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+            <div style="flex:1; min-width:250px; display:flex; flex-direction:column; gap:0.3rem;">
+              <label style="font-size:0.85rem; color:#aaa;">Контактный телефон</label>
+              <input type="tel" id="mfgPhone" placeholder="+7 999 000-00-00" style="padding:0.8rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff;" />
+            </div>
+            <div style="flex:1; min-width:250px; display:flex; flex-direction:column; gap:0.3rem;">
+              <label style="font-size:0.85rem; color:#aaa;">Адрес мастерской / Склада</label>
+              <input type="text" id="mfgAddress" placeholder="г. Москва, ул. Производственная, д. 4" style="padding:0.8rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff;" />
+            </div>
+          </div>
+          
+          <div style="display:flex; flex-direction:column; gap:0.3rem;">
+            <label style="font-size:0.85rem; color:#aaa;">Поддерживаемые материалы и опции</label>
+            <input type="text" id="mfgMaterials" placeholder="Нержавеющая сталь AISI 420, Облегченные фрезерованные ступицы" style="padding:0.8rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff;" />
+          </div>
+          
+          <button type="submit" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:1rem; border-radius:var(--radius); cursor:pointer; font-weight:bold; transition:var(--transition);">Сохранить профиль производства</button>
+        </form>
+      </div>
+
+      <!-- 5. Superadmin site settings -->
+      <div id="settingsTab" style="display:none; max-width:600px;">
+        <h2 style="color:var(--color-primary-start); margin-bottom:1.5rem;">⚙️ Настройки Сайта (Суперюзер)</h2>
+        <form id="siteSettingsForm" style="display:flex; flex-direction:column; gap:1.2rem;">
+          <div style="display:flex; flex-direction:column; gap:0.3rem;">
+            <label style="font-size:0.85rem; color:#aaa;">Контактная почта (в футере)</label>
+            <input type="email" id="setContactEmail" required style="padding:0.8rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff;" />
+          </div>
+          
+          <div style="display:flex; flex-direction:column; gap:0.5rem; border-top:1px solid #333; padding-top:1.2rem;">
+            <h4 style="color:#fff;">Редактор Статей Футера</h4>
+            
+            <!-- Article 1 -->
+            <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:8px; border:1px solid #333;">
+              <div style="font-weight:bold; color:var(--color-primary-start); margin-bottom:0.5rem;">Статья 1</div>
+              <input type="text" id="art1TitleRu" placeholder="Заголовок (RU)" required style="padding:0.6rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; width:100%; margin-bottom:0.5rem;" />
+              <input type="text" id="art1TitleEn" placeholder="Заголовок (EN)" required style="padding:0.6rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; width:100%; margin-bottom:0.5rem;" />
+              <textarea id="art1ContentRu" placeholder="Содержание (RU)" required style="padding:0.6rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; width:100%; min-height:60px; font-family:inherit; margin-bottom:0.5rem;"></textarea>
+              <textarea id="art1ContentEn" placeholder="Содержание (EN)" required style="padding:0.6rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; width:100%; min-height:60px; font-family:inherit;"></textarea>
+            </div>
+            
+            <!-- Article 2 -->
+            <div style="background:rgba(0,0,0,0.2); padding:1rem; border-radius:8px; border:1px solid #333; margin-top:0.8rem;">
+              <div style="font-weight:bold; color:var(--color-primary-start); margin-bottom:0.5rem;">Статья 2</div>
+              <input type="text" id="art2TitleRu" placeholder="Заголовок (RU)" required style="padding:0.6rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; width:100%; margin-bottom:0.5rem;" />
+              <input type="text" id="art2TitleEn" placeholder="Заголовок (EN)" required style="padding:0.6rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; width:100%; margin-bottom:0.5rem;" />
+              <textarea id="art2ContentRu" placeholder="Содержание (RU)" required style="padding:0.6rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; width:100%; min-height:60px; font-family:inherit; margin-bottom:0.5rem;"></textarea>
+              <textarea id="art2ContentEn" placeholder="Содержание (EN)" required style="padding:0.6rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; width:100%; min-height:60px; font-family:inherit;"></textarea>
+            </div>
+          </div>
+          
+          <button type="submit" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:1rem; border-radius:var(--radius); cursor:pointer; font-weight:bold; margin-top:0.5rem;">Сохранить настройки сайта</button>
+        </form>
+      </div>
+
+      <!-- 6. Superadmin Producers Section -->
+      <div id="producersTab" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+          <div>
+            <h2 style="color:var(--color-primary-start);">🏭 Управление Производителями</h2>
+            <p style="font-size:0.85rem; color:#aaa;">Здесь суперпользователь может добавлять новых производителей на платформу.</p>
+          </div>
+          <button id="openAddProducerModalBtn" style="padding:0.6rem 1.2rem; border:none; border-radius:var(--radius); font-weight:bold; cursor:pointer; background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff;">➕ Добавить Производителя</button>
+        </div>
+        
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Пользователь (Логин)</th>
+              <th>Название компании (Бренд)</th>
+              <th>Пароль</th>
+              <th>Роль</th>
+            </tr>
+          </thead>
+          <tbody id="producersTableBody">
+            <!-- Dynamically filled by admin.js -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Add Producer Modal -->
+  <div class="modal" id="addProducerModal" style="display:none;">
+    <div class="modal-content" style="max-width:400px;">
+      <h2 style="color:var(--color-primary-start); margin-bottom:1.2rem;">➕ Новый Производитель</h2>
+      <form id="addProducerForm" style="display:flex; flex-direction:column; gap:1rem;">
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:#aaa;">Логин администратора</label>
+          <input type="text" id="prodUsername" required placeholder="garage2" style="padding:0.8rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff;" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:#aaa;">Пароль</label>
+          <input type="password" id="prodPassword" required placeholder="admin123" style="padding:0.8rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff;" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:#aaa;">Название производителя (Бренд)</label>
+          <input type="text" id="prodMfgName" required placeholder="Garage2 Racing" style="padding:0.8rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff;" />
+        </div>
+        <button type="submit" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:1rem; border-radius:var(--radius); cursor:pointer; font-weight:bold; margin-top:0.5rem;">Создать производителя</button>
+        <button type="button" id="closeProducerModal" style="background:transparent; color:#fff; border:1px solid #444; padding:0.8rem; border-radius:var(--radius); cursor:pointer; text-align:center;">Отмена</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Product Modal (hidden) -->
+  <div class="modal edit-modal" id="editModal" style="display:none;">
+    <div class="modal-content">
+      <h2>Редактировать товар</h2>
+      <form id="editForm" class="edit-form">
+        <!-- РАЗДЕЛ: КАРТОЧКА ТОВАРА -->
+        <div style="grid-column: 1 / -1; margin-top: 0.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary-start); padding-bottom: 0.3rem;">
+          <span style="font-size: 1.1rem; font-weight: bold; color: var(--color-primary-start);">📇 Раздел: Карточка товара</span>
+        </div>
+        <div style="grid-column: 1 / -1; display:flex; gap:1rem; align-items:center;">
+          <input type="file" id="editImageFile" style="display:none;" accept="image/*" />
+          <img id="editImagePreview" src="" alt="preview" style="width:60px; height:60px; border-radius:8px; object-fit:cover; border:1px solid #444; cursor:pointer;" title="Нажмите, чтобы загрузить фото" />
+          <input type="url" id="editImage" placeholder="URL изображения или Base64" required style="flex:1;" />
+        </div>
+        <input type="text" id="editName" placeholder="Название в карточке" required />
+        <input type="text" id="editMotoModel" placeholder="Модель мотоцикла для этой карточки (например: Yamaha R6)" />
+        <input type="text" id="editBrand" list="brandDatalist" placeholder="Бренд / Категория" required style="grid-column: 1 / -1;" />
+        
+        <div style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem; border-top:1px solid #333; padding-top:0.5rem;">
+          <label style="font-size:0.85rem; color:#aaa;">Галерея изображений (дополнительные фото, URL-адреса по одному в строке или загрузите файлы)</label>
+          <textarea id="editGallery" placeholder="Вставьте ссылки на изображения (по одной на строку)" style="min-height:75px; padding:0.6rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff; font-family:inherit; resize:vertical;"></textarea>
+          <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+            <input type="file" id="editGalleryFiles" style="display:none;" accept="image/*" multiple />
+            <button type="button" id="editGalleryUploadBtn" style="padding:0.4rem 0.8rem; font-size:0.85rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-surface); color:#fff; cursor:pointer; font-weight:bold;">📁 Загрузить фото в галерею</button>
+            <div id="editGalleryPreviews" style="display:flex; gap:0.4rem; overflow-x:auto; padding:0.2rem 0;"></div>
+          </div>
+        </div>
+
+        <!-- РАЗДЕЛ: СКЛАД -->
+        <div style="grid-column: 1 / -1; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary-start); padding-bottom: 0.3rem;">
+          <span style="font-size: 1.1rem; font-weight: bold; color: var(--color-primary-start);">📦 Раздел: Склад</span>
+        </div>
+        <input type="number" id="editPrice" placeholder="Цена" step="0.01" required />
+        <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:0.5rem;"><input type="checkbox" id="editStock" /> В наличии (снять для "Под заказ")</label>
+          <input type="number" id="editStockQty" placeholder="Количество шт." value="1" min="0" style="padding:0.4rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; width:120px;" />
+        </div>
+        <input type="text" id="editCompatibleMoto" placeholder="Создать дополнительные совместимые карточки (через запятую) - создаст новые карточки" style="grid-column: 1 / -1;" />
+
+        <!-- РАЗДЕЛ: SEO -->
+        <div style="grid-column: 1 / -1; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary-start); padding-bottom: 0.3rem;">
+          <span style="font-size: 1.1rem; font-weight: bold; color: var(--color-primary-start);">🔍 Раздел: SEO Настройки</span>
+        </div>
+        <div style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:0.8rem;">
+          <div style="display:flex; gap:0.5rem; width:100%;">
+            <input type="text" id="editSeoTitle" placeholder="SEO title" style="flex:1;" />
+            <button type="button" id="aiTitleBtn" style="padding:0.4rem; font-size:0.8rem;">✨ Title</button>
+          </div>
+          <div style="display:flex; gap:0.5rem; width:100%;">
+            <textarea id="editSeoDesc" placeholder="SEO description" style="flex:1; min-height:60px; padding:0.6rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff; font-family:inherit;"></textarea>
+            <button type="button" id="aiDescBtn" style="padding:0.4rem; font-size:0.8rem;">✨ Desc</button>
+          </div>
+          <div style="display:flex; gap:0.5rem; width:100%;">
+            <input type="text" id="editSeoKeywords" placeholder="SEO keywords (через запятую)" style="flex:1;" />
+            <button type="button" id="aiKeyBtn" style="padding:0.4rem; font-size:0.8rem;">✨ Keys</button>
+          </div>
+        </div>
+
+        <div style="grid-column: 1 / -1; display:flex; gap:1rem; margin-top:1rem;">
+          <button type="submit" id="saveEditBtn" style="flex:1;">Сохранить</button>
+          <button type="button" id="cancelEditBtn" style="flex:1; background:transparent; border:1px solid #444; color:#fff;">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Column Modal -->
+  <div class="modal" id="addColModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center;">
+    <div class="modal-content" style="background:var(--color-surface); padding:2rem; border-radius:var(--radius); width:100%; max-width:400px; box-shadow:var(--shadow);">
+      <h2 style="margin-top:0; color:var(--color-primary-start);">Добавить столбец</h2>
+      <form id="addColForm" style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
+        <input type="text" id="newColName" placeholder="Название (например: Трек-номер)" required style="padding:0.8rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff;" />
+        <div style="display:flex; gap:1rem;">
+          <button type="submit" style="flex:1; padding:0.8rem; background:var(--color-primary-start); color:#fff; border:none; border-radius:4px; cursor:pointer;">Сохранить</button>
+          <button type="button" id="cancelColBtn" style="flex:1; padding:0.8rem; background:transparent; border:1px solid #444; color:#fff; border-radius:4px; cursor:pointer; text-align:center;">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Manual Order Modal -->
+  <div class="modal" id="addOrderModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center;">
+    <div class="modal-content" style="background:var(--color-surface); padding:2rem; border-radius:var(--radius); width:100%; max-width:500px; box-shadow:var(--shadow); max-height:90vh; overflow-y:auto;">
+      <h2 style="margin-top:0; color:var(--color-primary-start);">Новый ручной заказ</h2>
+      <form id="addOrderForm" style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
+        <div>
+          <label style="font-size:0.85rem;color:#aaa;">Выберите товар</label>
+          <select id="manualProductSelect" style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; margin-top:0.3rem;" required></select>
+        </div>
+        <div id="dynamicOrderFields" style="display:flex; flex-direction:column; gap:1rem;"></div>
+        <div style="display:flex; gap:1rem; margin-top:1rem;">
+          <button type="submit" style="flex:1; padding:0.8rem; background:var(--color-primary-start); color:#fff; border:none; border-radius:4px; cursor:pointer;">Добавить заказ</button>
+          <button type="button" id="cancelOrderBtn" style="flex:1; padding:0.8rem; background:transparent; border:1px solid #444; color:#fff; border-radius:4px; cursor:pointer; text-align:center;">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Client Info Modal (Card Style) -->
+  <div class="modal" id="clientInfoModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:var(--color-surface); padding:0; border-radius:16px; max-width:440px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.5); overflow:hidden;">
+      <div style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); padding:1.5rem 2rem; display:flex; align-items:center; gap:1rem;">
+        <div style="width:50px; height:50px; background:rgba(255,255,255,0.2); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.5rem;">👤</div>
+        <div>
+          <div id="clientModalName" style="font-size:1.2rem; font-weight:bold; color:#fff;">—</div>
+          <div id="clientModalId" style="font-size:0.8rem; color:rgba(255,255,255,0.7);">ID: —</div>
+        </div>
+      </div>
+      <div id="clientDetails" style="padding:1.5rem 2rem; display:flex; flex-direction:column; gap:1rem;"></div>
+      <div style="padding:0 2rem 1.5rem; display:flex; flex-direction:column; gap:0.5rem;">
+        <button id="chatWithClientBtn" style="width:100%; padding:0.8rem; background:var(--color-primary-start); color:#fff; border:none; border-radius:8px; cursor:pointer; font-weight:bold; transition:var(--transition);">💬 Начать диалог с клиентом</button>
+        <button id="closeClientModal" style="width:100%; padding:0.8rem; background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:8px; cursor:pointer; font-weight:bold; transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Details Modal -->
+  <div class="modal" id="orderDetailsModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:var(--color-surface); padding:0; border-radius:16px; max-width:520px; width:100%; box-shadow:0 20px 60px rgba(0,0,0,0.5); overflow:hidden; max-height:90vh; overflow-y:auto;">
+      <div style="background:linear-gradient(135deg, #1a1f35, #2b3252); padding:1.5rem 2rem; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:1.2rem; font-weight:bold; color:#fff;">📦 Детали заказа</div>
+          <div id="orderModalId" style="font-size:0.85rem; color:rgba(255,255,255,0.6);">—</div>
+        </div>
+        <div id="orderModalStatus" style="padding:0.3rem 0.8rem; border-radius:20px; font-size:0.8rem; font-weight:bold;">—</div>
+      </div>
+      <div id="orderDetailsContent" style="padding:1.5rem 2rem; display:flex; flex-direction:column; gap:1.2rem;"></div>
+      <div style="padding:0 2rem 1.5rem;">
+        <button id="closeOrderModal" style="width:100%; padding:0.8rem; background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:8px; cursor:pointer; font-weight:bold;">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Product Modal -->
+  <div class="modal edit-modal" id="addProductModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center;">
+    <div class="modal-content" style="background:var(--color-surface); padding:2rem; border-radius:var(--radius); max-width:600px; width:100%; box-shadow:var(--shadow); max-height:90vh; overflow-y:auto;">
+      <h2 style="margin-top:0; color:var(--color-primary-start);">Добавить товар</h2>
+      <form id="addProductForm" class="edit-form">
+        <!-- РАЗДЕЛ: КАРТОЧКА ТОВАРА -->
+        <div style="grid-column: 1 / -1; margin-top: 0.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary-start); padding-bottom: 0.3rem;">
+          <span style="font-size: 1.1rem; font-weight: bold; color: var(--color-primary-start);">📇 Раздел: Карточка товара</span>
+        </div>
+        <div style="grid-column: 1 / -1; display:flex; gap:1rem; align-items:center;">
+          <input type="file" id="addImgFile" style="display:none;" accept="image/*" />
+          <img id="addImgPreview" src="https://via.placeholder.com/60?text=+" alt="preview" style="width:60px; height:60px; border-radius:8px; object-fit:cover; border:1px dashed #888; cursor:pointer;" title="Нажмите, чтобы загрузить фото" />
+          <input type="url" id="addImage" placeholder="URL изображения или Base64 (необязательно)" style="flex:1;" />
+        </div>
+        <input type="text" id="addName" placeholder="Название в карточке (обязательно)" required />
+        <input type="text" id="addMotoModel" placeholder="Модель мотоцикла для этой карточки (например: Yamaha R6)" />
+        <input type="text" id="addBrand" list="brandDatalist" placeholder="Бренд / Категория (необязательно)" style="grid-column: 1 / -1;" />
+        <div id="addMfgWrapper" style="display:none; flex-direction:column; gap:0.3rem; grid-column: 1 / -1;">
+          <label style="font-size:0.85rem; color:#aaa; margin-left:0.2rem;">Производитель (владелец товара):</label>
+          <select id="addManufacturer" style="padding:0.6rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff; font-family:inherit;"></select>
+        </div>
+        
+        <div style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem; border-top:1px solid #333; padding-top:0.5rem;">
+          <label style="font-size:0.85rem; color:#aaa;">Галерея изображений (дополнительные фото, URL-адреса по одному в строке или загрузите файлы)</label>
+          <textarea id="addGallery" placeholder="Вставьте ссылки на изображения (по одной на строку)" style="min-height:75px; padding:0.6rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff; font-family:inherit; resize:vertical;"></textarea>
+          <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+            <input type="file" id="addGalleryFiles" style="display:none;" accept="image/*" multiple />
+            <button type="button" id="addGalleryUploadBtn" style="padding:0.4rem 0.8rem; font-size:0.85rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-surface); color:#fff; cursor:pointer; font-weight:bold;">📁 Загрузить фото в галерею</button>
+            <div id="addGalleryPreviews" style="display:flex; gap:0.4rem; overflow-x:auto; padding:0.2rem 0;"></div>
+          </div>
+        </div>
+
+        <!-- РАЗДЕЛ: СКЛАД -->
+        <div style="grid-column: 1 / -1; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary-start); padding-bottom: 0.3rem;">
+          <span style="font-size: 1.1rem; font-weight: bold; color: var(--color-primary-start);">📦 Раздел: Склад</span>
+        </div>
+        <input type="number" id="addPrice" placeholder="Цена (необязательно)" step="0.01" />
+        <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:0.5rem;"><input type="checkbox" id="addStock" checked /> В наличии</label>
+          <input type="number" id="addStockQty" placeholder="Количество шт." value="1" min="0" style="padding:0.4rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; width:120px;" />
+        </div>
+        <input type="text" id="addCompatibleMoto" placeholder="Создать дополнительные совместимые карточки (через запятую, например: Honda CBR600, Yamaha R6)" style="grid-column: 1 / -1;" />
+
+        <!-- РАЗДЕЛ: SEO -->
+        <div style="grid-column: 1 / -1; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 2px solid var(--color-primary-start); padding-bottom: 0.3rem;">
+          <span style="font-size: 1.1rem; font-weight: bold; color: var(--color-primary-start);">🔍 Раздел: SEO Настройки</span>
+        </div>
+        <div style="grid-column: 1 / -1; display:flex; flex-direction:column; gap:0.8rem;">
+          <input type="text" id="addSeoTitle" placeholder="SEO title" style="width:100%;" />
+          <textarea id="addSeoDesc" placeholder="SEO description" style="width:100%; min-height:60px; padding:0.6rem; border-radius:var(--radius); border:1px solid #444; background:var(--color-bg); color:#fff; font-family:inherit;"></textarea>
+          <input type="text" id="addSeoKeywords" placeholder="SEO keywords (через запятую)" style="width:100%;" />
+        </div>
+
+        <div style="grid-column: 1 / -1; display:flex; gap:0.5rem; margin-top:1rem; flex-wrap:wrap;">
+          <button type="submit" id="saveAddProductBtn" style="flex:1.2; padding:0.8rem; background:var(--color-primary-start); color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold; min-width:110px;">Добавить</button>
+          <button type="button" id="addAndContinueBtn" style="flex:1.5; padding:0.8rem; background:linear-gradient(135deg, #00e676, #00c853); color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold; min-width:170px;" title="Добавить этот товар и продолжить заполнение следующего">➕ Добавить еще</button>
+          <button type="button" id="previewAddProductBtn" style="flex:1.2; padding:0.8rem; background:rgba(0,176,255,0.15); border:1px solid #00b0ff; color:#00b0ff; border-radius:4px; cursor:pointer; font-weight:bold; min-width:130px;">🔍 Предпросмотр</button>
+          <button type="button" id="cancelAddProductBtn" style="flex:1; padding:0.8rem; background:transparent; border:1px solid #444; color:#fff; border-radius:4px; cursor:pointer; text-align:center; min-width:80px;">Отмена</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Product Preview Modal -->
+  <div class="modal" id="productPreviewModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:4000; align-items:center; justify-content:center; backdrop-filter:blur(8px);">
+    <div class="modal-content" style="max-width:350px; background:transparent; border:none; padding:0; box-shadow:none;">
+      <h3 style="text-align:center; color:#fff; margin-bottom:1.2rem; text-transform:uppercase; letter-spacing:1px; font-weight:bold; font-size:1.1rem;">Предпросмотр карточки</h3>
+      <div id="previewCardContainer" style="pointer-events:none;"></div>
+      <button type="button" id="closePreviewBtn" style="width:100%; margin-top:1.5rem; padding:0.8rem; background:#ff1744; color:#fff; border:none; border-radius:var(--radius); cursor:pointer; font-weight:bold; box-shadow:0 5px 15px rgba(255,23,68,0.3); transition:var(--transition);">Закрыть предпросмотр</button>
+    </div>
+  </div>
+
+  <script type="module" src="/admin.js?v=6"></script>
+  <script type="module" src="/admin/editModal.js?v=5"></script>
+</body>
+</html>
