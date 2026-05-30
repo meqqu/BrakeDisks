@@ -236,6 +236,8 @@ function loadProductDetails() {
   injectSchemaOrg(product);
 
   const savedRole = localStorage.getItem("brakeRole") || "user";
+  const savedUser = JSON.parse(localStorage.getItem("brakeUser") || "null");
+  const isGuest = !savedUser || !savedUser.username;
   const isAdmin = savedRole === "admin" || savedRole === "superadmin";
 
   if (product.visible === false && !isAdmin) {
@@ -317,6 +319,13 @@ function loadProductDetails() {
     btnHtml = `
       <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1.5rem;">
         <button class="add-to-cart add-to-cart-large" id="detailAddToCartBtn" style="background:var(--color-input-bg); color:var(--color-text); border:1px solid var(--color-border); cursor:default; margin-top:0;" disabled>🔒 Admin Mode</button>
+      </div>
+    `;
+  } else if (isGuest) {
+    btnHtml = `
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1.5rem;">
+        <button class="add-to-cart add-to-cart-large guest-buy-btn" id="detailAddToCartBtn" style="background:var(--color-input-bg); color:var(--color-muted); border:1px solid var(--color-border); margin-top:0;">🛒 Buy Now</button>
+        <button class="ask-mfg-btn" id="detailAskMfgBtn" style="padding:1rem 2rem; font-size:1.2rem; background:transparent; color:var(--color-text-bright); border:2px solid var(--color-primary-start); border-radius:var(--radius); cursor:pointer; font-weight:bold; transition:var(--transition); outline:none;" onmouseover="this.style.background='var(--color-primary-start)'; this.style.borderColor='var(--color-primary-start)';" onmouseout="this.style.background='transparent'; this.style.borderColor='var(--color-primary-start)';">💬 Ask Question</button>
       </div>
     `;
   } else {
@@ -706,9 +715,16 @@ function loadProductDetails() {
   }
 
   if (!isAdmin) {
-    document.getElementById("detailAddToCartBtn").addEventListener("click", () => {
-      addToCart(product.id);
-    });
+    if (isGuest) {
+      document.getElementById("detailAddToCartBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        window.location.href = "index.html?action=register";
+      });
+    } else {
+      document.getElementById("detailAddToCartBtn").addEventListener("click", () => {
+        addToCart(product.id);
+      });
+    }
   }
 }
 

@@ -544,6 +544,8 @@ function initUserMenu() {
   }
   
   const savedUser = JSON.parse(localStorage.getItem("brakeUser") || "{}");
+  const openLoginBtn = document.getElementById("openLoginBtn");
+  const accountNav = document.getElementById("accountNav");
 
   if (savedUser && savedUser.username) {
     if (userMenuText) userMenuText.textContent = savedUser.username;
@@ -551,6 +553,14 @@ function initUserMenu() {
       userInfo.textContent = `Hello, ${savedUser.username}`;
       userInfo.style.display = "block";
     }
+    if (openLoginBtn) openLoginBtn.style.display = "none";
+    if (logoutBtn)    logoutBtn.style.display = "block";
+    if (accountNav)   accountNav.style.display = "block";
+  } else {
+    if (userMenuText) userMenuText.textContent = "Sign In";
+    if (openLoginBtn) openLoginBtn.style.display = "block";
+    if (logoutBtn)    logoutBtn.style.display = "none";
+    if (accountNav)   accountNav.style.display = "none";
   }
 
   userMenuBtn.addEventListener("click", (e) => {
@@ -566,25 +576,30 @@ function initUserMenu() {
   });
 
   if (logoutBtn) {
-    logoutBtn.addEventListener("click", () => {
+    logoutBtn.addEventListener("click", async () => {
+      try {
+        await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      } catch (e) {
+        console.error("Logout API failed", e);
+      }
       localStorage.removeItem("brakeRole");
       localStorage.removeItem("brakeUser");
       window.location.href = "index.html";
     });
   }
 
-  if (userRole === "admin" || userRole === "superadmin") {
+  if (role === "admin" || role === "superadmin") {
     if(adminNav) adminNav.style.display = "block";
     
     // Only manufacturers (admin) have a workshop profile
-    if(tabMfgInfo) tabMfgInfo.style.display = userRole === "admin" ? "block" : "none";
+    if(tabMfgInfo) tabMfgInfo.style.display = role === "admin" ? "block" : "none";
     
     // Hide orders, support, and security tabs for admin/superadmin
     if(tabOrders) tabOrders.style.display = "none";
     if(tabSupport) tabSupport.style.display = "none";
     if(tabSecurity) tabSecurity.style.display = "none";
     
-    if (userRole === "superadmin") {
+    if (role === "superadmin") {
       if(navArticles) navArticles.style.display = "block";
       if(navUsers) navUsers.style.display = "block";
       if(navSettings) navSettings.style.display = "block";

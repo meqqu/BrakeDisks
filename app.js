@@ -217,7 +217,7 @@ function updateChatsNotification() {
     askQuestionBtn.innerHTML = "Ask a Question";
     askQuestionBtn.onclick = null;
     askQuestionBtn.style.border = "1px solid var(--color-primary-start)";
-    askQuestionBtn.style.color = "#fff";
+    askQuestionBtn.style.color = "var(--color-primary-start)";
   }
 }
 
@@ -282,8 +282,10 @@ if (closeAuthBtn) {
 if (tabLogin && tabRegister) {
   tabLogin.addEventListener("click", () => {
     currentAuthMode = "login";
-    tabLogin.style.color = "#fff"; tabLogin.style.borderBottom = "2px solid #7c3aed";
-    tabRegister.style.color = "#888"; tabRegister.style.borderBottom = "2px solid transparent";
+    tabLogin.classList.add("active");
+    tabRegister.classList.remove("active");
+    tabLogin.style.color = ""; tabLogin.style.borderBottom = "";
+    tabRegister.style.color = ""; tabRegister.style.borderBottom = "";
     document.getElementById("authModalTitle").textContent = "Sign In";
     document.getElementById("authModalSub").textContent = "Welcome back to MotoBrake Discs";
     document.getElementById("authModalIcon").textContent = "👤";
@@ -298,8 +300,10 @@ if (tabLogin && tabRegister) {
 
   tabRegister.addEventListener("click", () => {
     currentAuthMode = "register";
-    tabRegister.style.color = "#fff"; tabRegister.style.borderBottom = "2px solid #7c3aed";
-    tabLogin.style.color = "#888"; tabLogin.style.borderBottom = "2px solid transparent";
+    tabRegister.classList.add("active");
+    tabLogin.classList.remove("active");
+    tabRegister.style.color = ""; tabRegister.style.borderBottom = "";
+    tabLogin.style.color = ""; tabLogin.style.borderBottom = "";
     document.getElementById("authModalTitle").textContent = "Create Account";
     document.getElementById("authModalSub").textContent = "Join MotoBrake Discs";
     document.getElementById("authModalIcon").textContent = "✨";
@@ -465,7 +469,11 @@ function init() {
   
   if (urlParams.get("action") === "login" && loginModal) {
     loginModal.style.display = "flex";
-    // clean up url without reloading
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else if (urlParams.get("action") === "register" && loginModal) {
+    loginModal.style.display = "flex";
+    const tabRegister = document.getElementById("tabRegister");
+    if (tabRegister) tabRegister.click();
     window.history.replaceState({}, document.title, window.location.pathname);
   }
   
@@ -569,10 +577,18 @@ function renderProducts() {
 
     // Point 4: Hide/disable Buy button for admin and superadmin
     const savedRole = localStorage.getItem("brakeRole") || "user";
+    const savedUser = JSON.parse(localStorage.getItem("brakeUser") || "null");
+    const isGuest = !savedUser || !savedUser.username;
     const isAdmin = savedRole === "admin" || savedRole === "superadmin";
-    const buttonHtml = isAdmin
-      ? `<button class="add-to-cart-btn" style="background:var(--color-input-bg); color:var(--color-text); border:1px solid var(--color-border); cursor:default;" disabled>🔒 Admin Mode</button>`
-      : `<button class="add-to-cart-btn" data-id="${p.id}">Buy</button>`;
+    
+    let buttonHtml = '';
+    if (isAdmin) {
+      buttonHtml = `<button class="add-to-cart-btn" style="background:var(--color-input-bg); color:var(--color-text); border:1px solid var(--color-border); cursor:default;" disabled>🔒 Admin Mode</button>`;
+    } else if (isGuest) {
+      buttonHtml = `<button class="add-to-cart-btn guest-buy-btn" style="background:var(--color-input-bg); color:var(--color-muted); border:1px solid var(--color-border);" data-id="${p.id}">Buy</button>`;
+    } else {
+      buttonHtml = `<button class="add-to-cart-btn" data-id="${p.id}">Buy</button>`;
+    }
 
     const priceVal = parseFloat(p.price);
     const displayPrice = isNaN(priceVal) ? "0.00" : priceVal.toFixed(2);
@@ -626,10 +642,24 @@ function renderProducts() {
     
     // Add to cart click event if not admin
     if (!isAdmin) {
-      card.querySelector(".add-to-cart-btn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        addToCart(p.id);
-      });
+      if (isGuest) {
+        card.querySelector(".add-to-cart-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          const loginModal = document.getElementById("loginModal");
+          if (loginModal) {
+            loginModal.style.display = "flex";
+            const tabRegister = document.getElementById("tabRegister");
+            if (tabRegister) tabRegister.click();
+          } else {
+            window.location.href = "index.html?action=register";
+          }
+        });
+      } else {
+        card.querySelector(".add-to-cart-btn").addEventListener("click", (e) => {
+          e.stopPropagation();
+          addToCart(p.id);
+        });
+      }
     }
     
     // Navigation to product details
@@ -907,19 +937,50 @@ if (customDiscsLink) {
     gridContainer.style.gridColumn = "1/-1";
     productGridEl.appendChild(gridContainer);
     
+    const savedRole = localStorage.getItem("brakeRole") || "user";
+    const savedUser = JSON.parse(localStorage.getItem("brakeUser") || "null");
+    const isGuest = !savedUser || !savedUser.username;
+    const isAdmin = savedRole === "admin" || savedRole === "superadmin";
+
     customProducts.forEach(p => {
       const card = document.createElement("div");
       card.className = "product-card";
+      
+      let buttonHtml = '';
+      if (isAdmin) {
+        buttonHtml = `<button class="add-to-cart-btn add-to-cart" style="background:var(--color-input-bg); color:var(--color-text); border:1px solid var(--color-border); cursor:default;" disabled>🔒 Admin Mode</button>`;
+      } else if (isGuest) {
+        buttonHtml = `<button class="add-to-cart-btn add-to-cart guest-buy-btn" style="background:var(--color-input-bg); color:var(--color-muted); border:1px solid var(--color-border);" data-id="${p.id}">Buy</button>`;
+      } else {
+        buttonHtml = `<button class="add-to-cart-btn add-to-cart" data-id="${p.id}">Buy</button>`;
+      }
+
       card.innerHTML = `
         <img src="${p.image}" alt="${p.seoTitle || p.name}" class="product-img" style="width:100%; height:200px; object-fit:cover;" />
         <div style="padding:1rem; text-align:center;">
           <div class="product-brand" style="font-size:0.85rem; color:var(--color-muted); text-transform:uppercase;">${p.brand}</div>
           <div class="product-name" style="font-size:1.2rem; font-weight:600;">${p.name}</div>
           <div class="product-price" style="font-size:1.4rem; color:var(--color-primary-start); margin:0.5rem 0;">$${p.price.toFixed(2)}</div>
-          <button class="add-to-cart-btn add-to-cart" data-id="${p.id}">Buy</button>
+          ${buttonHtml}
         </div>
       `;
-      card.querySelector('.add-to-cart').addEventListener('click', (e) => { e.stopPropagation(); addToCart(p.id); });
+      if (!isAdmin) {
+        if (isGuest) {
+          card.querySelector('.add-to-cart').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const loginModal = document.getElementById("loginModal");
+            if (loginModal) {
+              loginModal.style.display = "flex";
+              const tabRegister = document.getElementById("tabRegister");
+              if (tabRegister) tabRegister.click();
+            } else {
+              window.location.href = "index.html?action=register";
+            }
+          });
+        } else {
+          card.querySelector('.add-to-cart').addEventListener('click', (e) => { e.stopPropagation(); addToCart(p.id); });
+        }
+      }
       card.style.cursor = 'pointer';
       card.addEventListener('click', () => { window.location.href = `product.html?id=${p.slug || p.id}`; });
       gridContainer.appendChild(card);

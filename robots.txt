@@ -1,0 +1,13 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /admin.html
+Disallow: /settings.html
+Disallow: /users.html
+Disallow: /account.html
+Disallow: /checkout.html
+Disallow: /reset-password.html
+Disallow: /server.js
+Disallow: /app.js
+Disallow: /api/
+
+Sitemap: https://brakediscs.com/sitemap.xml
