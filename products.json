@@ -1,34 +1,78 @@
 [
   {
     "id": 1,
-    "name": "Тормозной диск Yamaha R1",
+    "name": "Yamaha YZF-R1 Front Brake Disc",
     "brand": "Yamaha",
     "price": 120.99,
     "image": "https://picsum.photos/seed/yamaha1/300/150",
-    "stock": true
+    "stock": true,
+    "stockCount": 14,
+    "placement": "Front",
+    "manufacturer": "Garage1",
+    "motoModel": "YZF-R1",
+    "motoYears": "2015-2023",
+    "slug": "yamaha-yzf-r1-front-brake-disc",
+    "seo": {
+      "title": "Buy Yamaha YZF-R1 Front Brake Disc | High Quality Brakes",
+      "description": "Premium front brake disc for Yamaha YZF-R1 (2015-2023). Durable construction, excellent heat dissipation. Order online!",
+      "keywords": "yamaha, yzf-r1, front brake disc, motorcycle brakes"
+    }
   },
   {
     "id": 2,
-    "name": "Тормозной диск Honda CBR",
+    "name": "Honda CBR1000RR Rear Brake Disc",
     "brand": "Honda",
     "price": 115.49,
     "image": "https://picsum.photos/seed/honda1/300/150",
-    "stock": false
+    "stock": true,
+    "stockCount": 8,
+    "placement": "Rear",
+    "manufacturer": "BrakeDiscs Official",
+    "motoModel": "CBR1000RR Fireblade",
+    "motoYears": "2017-2022",
+    "slug": "honda-cbr1000rr-rear-brake-disc",
+    "seo": {
+      "title": "Buy Honda CBR1000RR Rear Brake Disc | High Quality Brakes",
+      "description": "Premium rear brake disc for Honda CBR1000RR Fireblade (2017-2022). Durable construction, excellent heat dissipation. Order online!",
+      "keywords": "honda, cbr1000rr, rear brake disc, motorcycle brakes"
+    }
   },
   {
     "id": 3,
-    "name": "Тормозной диск Kawasaki Ninja",
+    "name": "Kawasaki ZX-10R Front Brake Disc",
     "brand": "Kawasaki",
-    "price": 130.00,
+    "price": 130,
     "image": "https://picsum.photos/seed/kawasaki1/300/150",
-    "stock": true
+    "stock": true,
+    "stockCount": 20,
+    "placement": "Front",
+    "manufacturer": "Garage1",
+    "motoModel": "Ninja ZX-10R",
+    "motoYears": "2016-2023",
+    "slug": "kawasaki-zx-10r-front-brake-disc",
+    "seo": {
+      "title": "Buy Kawasaki ZX-10R Front Brake Disc | High Quality Brakes",
+      "description": "Premium front brake disc for Kawasaki Ninja ZX-10R (2016-2023). Durable construction, excellent heat dissipation. Order online!",
+      "keywords": "kawasaki, zx-10r, front brake disc, motorcycle brakes"
+    }
   },
   {
     "id": 4,
-    "name": "Тормозной диск Suzuki GSX",
+    "name": "Suzuki GSX-R1000 Rear Brake Disc",
     "brand": "Suzuki",
     "price": 118.75,
     "image": "https://picsum.photos/seed/suzuki1/300/150",
-    "stock": false
+    "stock": false,
+    "stockCount": 0,
+    "placement": "Rear",
+    "manufacturer": "BrakeDiscs Official",
+    "motoModel": "GSX-R1000",
+    "motoYears": "2018-2021",
+    "slug": "suzuki-gsx-r1000-rear-brake-disc",
+    "seo": {
+      "title": "Buy Suzuki GSX-R1000 Rear Brake Disc | High Quality Brakes",
+      "description": "Premium rear brake disc for Suzuki GSX-R1000 (2018-2021). Durable construction, excellent heat dissipation. Order online!",
+      "keywords": "suzuki, gsx-r1000, rear brake disc, motorcycle brakes"
+    }
   }
 ]

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📝 Articles Editor — Brake Discs Store</title>
+  <meta name="description" content="Write, edit and manage articles and reviews for the Brake Discs Store." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+</head>
+<body>
+  <div id="toastNotification" class="toast-notification">
+    <span id="toastIcon">🔔</span>
+    <span id="toastText">Notification</span>
+  </div>
+
+  <header class="header">
+    <h1 class="logo">📝 Articles Editor</h1>
+    <nav class="nav" style="display: flex; align-items: center; gap: 1rem;">
+      <a href="/index.html" class="nav-link" id="backToStore">← Return to Shop</a>
+      <div class="user-menu" style="position: relative;">
+        <button class="nav-link" id="userMenuBtn" title="Profile">
+          <span id="userMenuText">Sign In</span>
+          <span>👤</span>
+        </button>
+                <div id="userDropdown" class="user-dropdown" style="display:none;">
+          <div id="userInfo" class="dropdown-header" style="display:none;">Hello, Guest</div>
+          <button id="openLoginBtn"  class="dropdown-item" style="display:none;">Sign In / Register</button>
+          <a href="/account.html" class="dropdown-item" id="accountNav" style="display:none; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">👤 Profile</a>
+          <a href="/admin.html" class="dropdown-item admin-link" id="adminNav" style="display:none; color:var(--color-primary-start); padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">🏭 Warehouse</a>
+          <a href="/articles.html" class="dropdown-item" id="navArticles" style="display:none; color:#ff007f; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">📝 Articles</a>
+          <a href="/users.html" class="dropdown-item" id="navUsers" style="display:none; color:#00b0ff; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">👤 Users</a>
+          <a href="/settings.html" class="dropdown-item" id="navSettings" style="display:none; color:#00e676; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">⚙️ Site Settings</a>
+          <button id="logoutBtn"  class="dropdown-item" style="display:none;">Logout</button>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <main class="main">
+    <section class="admin-section" id="adminSection">
+
+      <!-- Superadmin: filter articles by manufacturer -->
+      <div id="superadminManufacturerFilter" style="display:none; align-items:center; gap:0.8rem; margin-bottom:1.5rem; padding:1rem; background:var(--color-surface); border-radius:var(--radius); border-left:4px solid var(--color-primary-start);">
+        <label style="font-weight:bold; color:var(--color-primary-start); white-space:nowrap;">🔍 View articles by:</label>
+        <select id="superadminManufacturerSelect" style="padding:0.5rem 1rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); font-family:inherit; font-size:0.9rem;">
+          <option value="all">All Manufacturers</option>
+        </select>
+      </div>
+
+      <div id="articlesTab" style="display:block;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
+          <div>
+            <h2 style="color:var(--color-primary-start); margin:0;">📝 Article Management</h2>
+            <p style="font-size:0.85rem; color:var(--color-muted); margin:0.3rem 0 0 0;">Write articles, reviews, and share production insights. Articles appear in manufacturer profiles and the store catalog.</p>
+          </div>
+          <button id="openAddArticleModalBtn" style="padding:0.6rem 1.2rem; background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; border-radius:var(--radius); cursor:pointer; font-weight:bold; transition:var(--transition); box-shadow:0 4px 15px rgba(255,85,0,0.2);">+ Write Article</button>
+        </div>
+
+        <div class="acc-table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th style="width:110px;">Photo</th>
+                <th>Title</th>
+                <th style="width:160px;">Author</th>
+                <th style="width:140px;">Date Created</th>
+                <th style="width:150px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="articlesTableBody">
+              <!-- Dynamically populated by admin.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Article Write / Edit Modal — IDs must match admin.js exactly -->
+  <div class="modal" id="articleEditModal" style="display:none; z-index:11000; align-items:center; justify-content:center; background:var(--color-modal-bg);">
+    <div class="modal-content" style="max-width:740px; width:95%; max-height:92vh; overflow-y:auto;">
+
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #333; padding-bottom:0.8rem; margin-bottom:1.5rem;">
+        <h2 id="articleModalTitle" style="color:var(--color-primary-start); margin:0;">✍️ Write Article</h2>
+        <span id="closeArticleModalBtn" style="font-size:1.5rem; cursor:pointer; color:var(--color-muted); font-weight:bold; line-height:1;">&times;</span>
+      </div>
+
+      <form id="articleEditForm" style="display:flex; flex-direction:column; gap:1.2rem;">
+        <input type="hidden" id="editArticleId" value="" />
+
+        <!-- Title -->
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted); font-weight:600;">Article Title</label>
+          <input type="text" id="articleTitleInput" placeholder="e.g. How to choose the right brake disc" required
+            style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright); font-size:1rem;" />
+        </div>
+
+        <!-- Cover Image -->
+        <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+          <img id="articleImagePreview" src="https://via.placeholder.com/80x55?text=+" alt="cover"
+            style="width:80px; height:55px; border-radius:6px; object-fit:cover; border:1px dashed #555; cursor:pointer;" title="Click to upload" />
+          <input type="file" id="articleImageFile" accept="image/*" style="display:none;" />
+          <div style="flex:1; min-width:200px; display:flex; flex-direction:column; gap:0.3rem;">
+            <label style="font-size:0.85rem; color:var(--color-muted);">Cover Image URL</label>
+            <input type="url" id="articleImageInput" placeholder="https://example.com/image.jpg"
+              style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright);" />
+          </div>
+        </div>
+
+        <!-- Video -->
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted);">YouTube / Video URL <span style="color:#555;">(optional)</span></label>
+          <input type="url" id="articleVideoInput" placeholder="https://www.youtube.com/embed/..."
+            style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright);" />
+        </div>
+
+        <!-- Rich Content Editor -->
+        <div style="display:flex; flex-direction:column; gap:0.5rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted); font-weight:600;">Content <span style="color:#555; font-weight:400;">(HTML supported)</span></label>
+          <div style="display:flex; gap:0.4rem; flex-wrap:wrap; background:var(--color-input-bg); padding:0.5rem; border-radius:6px; border:1px solid var(--color-border);">
+            <button type="button" class="format-btn brand-btn" data-tag="h3"   style="padding:0.3rem 0.6rem; font-size:0.8rem;">H3</button>
+            <button type="button" class="format-btn brand-btn" data-tag="p"    style="padding:0.3rem 0.6rem; font-size:0.8rem;">¶ Para</button>
+            <button type="button" class="format-btn brand-btn" data-tag="bold" style="padding:0.3rem 0.6rem; font-size:0.8rem; font-weight:bold;">B Bold</button>
+            <button type="button" class="format-btn brand-btn" data-tag="img"  style="padding:0.3rem 0.6rem; font-size:0.8rem;">🖼 Img</button>
+            <button type="button" class="format-btn brand-btn" data-tag="youtube" style="padding:0.3rem 0.6rem; font-size:0.8rem;">▶ YouTube</button>
+          </div>
+          <textarea id="articleContentInput" placeholder="Write your article content here... HTML tags are supported for rich formatting."
+            style="padding:0.8rem; min-height:200px; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright); font-family:inherit; resize:vertical; font-size:0.9rem; line-height:1.6;"></textarea>
+        </div>
+
+        <div style="display:flex; gap:0.5rem; justify-content:flex-end; padding-top:0.5rem; border-top:1px solid var(--color-border);">
+          <button type="button" id="closeArticleModalBtn2" onclick="document.getElementById('articleEditModal').style.display='none'"
+            style="padding:0.8rem 1.5rem; background:var(--color-border-strong); border:none; color:var(--color-text-bright); border-radius:var(--radius); cursor:pointer; font-weight:bold;">Cancel</button>
+          <button type="submit" style="padding:0.8rem 1.8rem; background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); border:none; color:#fff; border-radius:var(--radius); font-weight:bold; cursor:pointer;">💾 Save Article</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/admin.js?v=2"></script>
+  <script>
+    function toggleTheme() {
+      const root = document.documentElement;
+      const newTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+    }
+  </script>
+</body>
+</html>

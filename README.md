@@ -38,8 +38,12 @@ npm install
 
 # 2. Start the dev server
 npm run dev
+
+# Or start using the python HTTP server (user preferred)
+npm run start-python
+# (Equivalent to: python3 -m http.server 8080)
 ```
-The site will be available at `http://localhost:5173`.
+The site will be available at `http://localhost:5173` (Vite dev) or `http://localhost:8080` (Python HTTP server).
 
 - Open `http://localhost:5173` to view the shop.
 - Open `http://localhost:5173/admin.html` for the warehouse. Use the password `admin123` (or change it in `config.js`).

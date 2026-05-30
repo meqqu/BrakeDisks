@@ -1,50 +1,171 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Brake Discs Store</title>
-  <meta name="description" content="Интернет‑магазин тормозных дисков для мотоциклов. Фильтрация по брендам, быстрый поиск, современный дизайн." />
-  <link rel="stylesheet" href="/style.css?v=7" />
+  <meta name="description"
+    content="Motorcycle brake discs online store. Brand filtering, quick search, modern design." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
 </head>
+
 <body>
   <!-- Toast Notification Overlay -->
   <div id="toastNotification" class="toast-notification">
     <span id="toastIcon">🔔</span>
-    <span id="toastText">Уведомление</span>
+    <span id="toastText">Notification</span>
   </div>
 
   <!-- Auth Modal -->
+  <!-- Auth Modal (Login / Register / Forgot Password) -->
   <div class="modal" id="loginModal" style="display:none;">
-    <div class="modal-content">
-      <div class="auth-tabs">
-        <button id="tabLogin" class="auth-tab active">Вход</button>
-        <button id="tabRegister" class="auth-tab">Регистрация</button>
+    <div class="modal-content premium" style="max-width:440px;">
+
+      <!-- Header -->
+      <div class="modal-header">
+        <button id="closeAuthBtn" class="modal-close-btn">✕</button>
+        <div class="modal-header-icon" id="authModalIcon">👤</div>
+        <h2 class="modal-header-title" id="authModalTitle">Sign In</h2>
+        <p class="modal-header-sub" id="authModalSub">Welcome back to MotoBrake Discs</p>
       </div>
-      <form id="authForm" class="auth-form">
-        <input type="text" id="loginUsername" placeholder="Имя пользователя" required />
-        <input type="password" id="loginPassword" placeholder="Пароль" required />
-        <button type="submit" id="authBtn">Войти</button>
-      </form>
-      <button id="closeAuthBtn" style="margin-top:1rem; background:transparent; color:var(--color-text); border:1px solid var(--color-muted); padding:0.4rem; border-radius:var(--radius); width:100%; cursor:pointer;">Закрыть</button>
+
+      <!-- Tabs -->
+      <div id="authTabsBar" class="auth-tabs" style="border-bottom: 1px solid var(--color-border-light);">
+        <button id="tabLogin" class="auth-tab active">Sign In</button>
+        <button id="tabRegister" class="auth-tab">Register</button>
+      </div>
+
+      <!-- Body -->
+      <div class="modal-body">
+        <!-- Status message -->
+        <div id="authMsg"
+          style="display:none;padding:0.8rem 1rem;border-radius:var(--radius-md);margin-bottom:1rem;font-size:0.9rem;font-weight:600;">
+        </div>
+
+        <!-- Login/Register form -->
+        <form id="authForm" class="auth-form">
+          <div class="input-group">
+            <label>Username</label>
+            <input type="text" id="loginUsername" placeholder="Your username" required autocomplete="username" />
+          </div>
+          <div id="emailFieldWrapper" class="input-group" style="display:none;">
+            <label>Email</label>
+            <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" />
+          </div>
+          <div class="input-group">
+            <label>Password</label>
+            <input type="password" id="loginPassword" placeholder="Your password" required
+              autocomplete="current-password" />
+          </div>
+          <!-- Forgot password link -->
+          <div id="forgotPasswordLink" style="text-align:right; margin-top:-0.4rem;">
+            <button type="button" id="showForgotBtn" class="link-btn">Forgot password?</button>
+          </div>
+          <button type="submit" id="authBtn" class="primary-btn" style="margin-top:0.3rem;">Sign In</button>
+        </form>
+
+        <!-- Forgot Password panel -->
+        <div id="forgotPanel" class="auth-form" style="display:none;">
+          <p style="margin:0 0 0.5rem;color:var(--color-muted);font-size:0.9rem;">Enter the email linked to your account
+            and we'll send you a password reset link.</p>
+          <div class="input-group">
+            <label>Your Email</label>
+            <input type="email" id="forgotEmail" placeholder="your@email.com" />
+          </div>
+          <button type="button" id="sendForgotBtn" class="primary-btn">📧 Send Reset Link</button>
+          <button type="button" id="backToLoginBtn" class="link-btn">← Back to Sign In</button>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- Ask Question Modal -->
   <div class="modal" id="askModal" style="display:none;">
-    <div class="modal-content">
-      <h2 style="color:var(--color-primary-start);" id="askModalTitle">Задать вопрос</h2>
-      <p id="askWarning" style="color:#ff5555; display:none; margin-bottom:1rem;">Пожалуйста, войдите в профиль или зарегистрируйтесь, чтобы задать вопрос.</p>
-      <form id="askForm" style="display:flex; flex-direction:column; gap:1rem;">
-        <div id="mfgSelectWrapper" style="display:flex; flex-direction:column; gap:0.3rem;">
-          <label style="font-size:0.85rem; color:#aaa;" id="lblAskMfg">Кому задать вопрос (Производитель)</label>
-          <select id="askManufacturer" required style="padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); font-family:inherit;">
-            <option value="BrakeDiscs Official">BrakeDiscs Official</option>
-          </select>
+    <div class="modal-content premium" style="max-width:500px;">
+
+      <!-- Header -->
+      <div class="modal-header">
+        <button type="button" id="closeAskBtn" class="modal-close-btn">✕</button>
+        <div style="display:flex; align-items:center; gap:1rem;">
+          <div
+            style="width:48px; height:48px; background:rgba(255,255,255,0.2); border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; font-size:1.6rem; flex-shrink:0;">
+            💬</div>
+          <div>
+            <h2 class="modal-header-title" id="askModalTitle">Ask a Question</h2>
+            <p class="modal-header-sub">We usually respond within a few hours</p>
+          </div>
         </div>
-        <textarea id="askText" placeholder="Напишите ваш вопрос здесь..." required style="min-height:100px; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); font-family:inherit;"></textarea>
-        <button type="submit" id="submitAskBtn" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:0.6rem; border-radius:var(--radius); cursor:pointer; font-weight:bold;">Отправить</button>
-        <button type="button" id="closeAskBtn" style="background:transparent; color:var(--color-text); border:1px solid var(--color-muted); padding:0.4rem; border-radius:var(--radius); cursor:pointer;">Отмена</button>
+      </div>
+
+      <!-- Warning (not logged in) -->
+      <div id="askWarning"
+        style="display:none; background:rgba(255,85,85,0.12); border-left:4px solid #ff5555; padding:0.8rem 1.2rem; margin:1.2rem 1.5rem 0; border-radius:var(--radius-md);">
+        <div style="color:#ff7070; font-size:0.9rem; font-weight:600;">⚠️ Please log in or register to ask a question.
+        </div>
+      </div>
+
+      <!-- Form Body -->
+      <form id="askForm" class="modal-body auth-form" style="padding-top:1.5rem;">
+
+        <!-- Manufacturer select -->
+        <div id="mfgSelectWrapper" class="input-group">
+          <label id="lblAskMfg">Recipient</label>
+          <div style="position:relative;">
+            <span
+              style="position:absolute; left:0.9rem; top:50%; transform:translateY(-50%); font-size:1rem; pointer-events:none;">🏭</span>
+            <select id="askManufacturer" required class="icon-input">
+              <option value="BrakeDiscs Official">BrakeDiscs Official</option>
+            </select>
+            <span
+              style="position:absolute; right:0.9rem; top:50%; transform:translateY(-50%); pointer-events:none; color:var(--color-muted); font-size:0.8rem;">▾</span>
+          </div>
+        </div>
+
+        <!-- Message textarea -->
+        <div class="input-group">
+          <label>Your Message</label>
+          <div style="position:relative;">
+            <textarea id="askText"
+              placeholder="Describe your question in detail — about compatibility, delivery, product specs, or anything else..."
+              required maxlength="1000" class="icon-input"
+              style="min-height:130px; padding-left:1rem; resize:vertical; line-height:1.6;"
+              oninput="document.getElementById('askCharCount').textContent=this.value.length"></textarea>
+            <span id="askCharCount"
+              style="position:absolute; bottom:0.5rem; right:0.75rem; font-size:0.75rem; color:#666; pointer-events:none;">0</span>
+            <span
+              style="position:absolute; bottom:0.5rem; right:1.5rem; font-size:0.75rem; color:#444; pointer-events:none;">/1000</span>
+          </div>
+        </div>
+
+        <!-- Tips -->
+        <div class="info-tip">
+          <span style="font-size:1.2rem; flex-shrink:0;">💡</span>
+          <p>The answer will appear in <strong style="color:var(--color-primary-start);">My Profile → Support</strong>.
+            Be specific — mention product name, model, or order number if relevant.</p>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex; gap:0.8rem; margin-top:0.3rem;">
+          <button type="button" id="closeAskBtnBottom" class="secondary-btn"
+            onclick="document.getElementById('askModal').style.display='none'">
+            Cancel
+          </button>
+          <button type="submit" id="submitAskBtn" class="primary-btn" style="flex:2;">
+            <span>📤</span> Send Question
+          </button>
+        </div>
+
       </form>
     </div>
   </div>
@@ -54,28 +175,42 @@
       <h1 class="logo">🏍️ MotoBrake <span class="logo-sub">Discs</span></h1>
     </div>
     <nav class="nav" style="margin-left:auto;">
-      <a href="#" class="nav-link" id="homeLink">Главная</a>
-      <a href="#" class="nav-link" id="customDiscsLink" style="color:var(--color-primary-start);">Диски на заказ</a>
-      <a href="/admin.html" class="nav-link admin-link" id="topAdminLink" style="display:none; color:#ffb300; font-weight:bold;">Склад</a>
-      <button class="nav-link" id="askQuestionBtn" style="background:none; border:1px solid var(--color-primary-start); color:#fff; cursor:pointer; border-radius:var(--radius); padding:0.4rem 0.8rem;">Задать вопрос</button>
-      <a href="#" class="nav-link" id="searchLink" style="display:none;">Поиск</a>
-      <button class="nav-link" id="cartToggle" title="Корзина" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer;">🛒</button>
-      
-      <!-- Point 9: Language switch adjecent to user menu -->
-      <button id="langToggle" style="background:none; border:none; font-size:1.4rem; cursor:pointer; padding:0 0.2rem;" title="Сменить язык">🇷🇺</button>
-      
+      <a href="#" class="nav-link" id="homeLink">Home</a>
+      <a href="/about.html" class="nav-link">About Us</a>
+      <a href="#" class="nav-link special-link" id="customDiscsLink">Custom Discs</a>
+      <a href="#" class="nav-link special-link" id="shopArticlesLink" style="display:none;">Articles</a>
+      <a href="/admin.html" class="nav-link special-link admin-link" id="topAdminLink"
+        style="display:none;">Warehouse</a>
+      <button class="nav-link header-action-btn" id="askQuestionBtn">Ask Question</button>
+      <a href="#" class="nav-link" id="searchLink" style="display:none;">Search</a>
+      <button class="nav-link" id="themeToggleBtn" title="Toggle Theme" onclick="toggleTheme()">🌓</button>
+      <button class="nav-link" id="cartToggle" title="Cart">🛒</button>
+
       <!-- User Menu -->
       <div class="user-menu">
-        <button id="userMenuBtn" title="Профиль" style="background:none; border:none; color:#fff; font-size:1rem; cursor:pointer; display:flex; align-items:center; gap:0.4rem; font-weight:bold;">
-          <span id="userMenuText">Войти</span>
-          <span style="font-size:1.2rem;">👤</span>
+        <button class="nav-link" id="userMenuBtn" title="Profile">
+          <span id="userMenuText">Sign In</span>
+          <span>👤</span>
         </button>
         <div id="userDropdown" class="user-dropdown" style="display:none;">
-          <div id="userInfo" class="dropdown-header" style="display:none;">Привет, Гость</div>
-          <button id="openLoginBtn" class="dropdown-item">Войти / Регистрация</button>
-          <a href="/account.html" class="dropdown-item" id="accountNav" style="display:none;">Личный кабинет</a>
-          <a href="/admin.html" class="dropdown-item admin-link" id="adminNav" style="display:none;">Склад</a>
-          <button id="logoutBtn" class="dropdown-item" style="display:none; text-align:left;">Выход</button>
+          <div id="userInfo" class="dropdown-header" style="display:none;">Hello, Guest</div>
+          <button id="openLoginBtn" class="dropdown-item" style="display:none;">Sign In / Register</button>
+          <a href="/account.html" class="dropdown-item" id="accountNav"
+            style="display:none; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">👤
+            Profile</a>
+          <a href="/admin.html" class="dropdown-item admin-link" id="adminNav"
+            style="display:none; color:var(--color-primary-start); padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">🏭
+            Warehouse</a>
+          <a href="/articles.html" class="dropdown-item" id="navArticles"
+            style="display:none; color:#ff007f; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">📝
+            Articles</a>
+          <a href="/users.html" class="dropdown-item" id="navUsers"
+            style="display:none; color:#00b0ff; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">👤
+            Users</a>
+          <a href="/settings.html" class="dropdown-item" id="navSettings"
+            style="display:none; color:#00e676; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">⚙️
+            Site Settings</a>
+          <button id="logoutBtn" class="dropdown-item" style="display:none;">Logout</button>
         </div>
       </div>
     </nav>
@@ -83,13 +218,17 @@
 
   <!-- Cart Drawer -->
   <div id="cartDrawer" class="cart-drawer">
-    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.8rem; margin-bottom:1rem;">
-      <h3 id="cartDrawerTitle" style="margin:0; color:var(--color-primary-start); font-size:1.4rem; font-weight:800;">Корзина</h3>
-      <button id="closeCartBtn" style="background:none; border:none; color:var(--color-primary-start); font-size:1.5rem; cursor:pointer; font-weight:bold; padding:0.2rem 0.5rem; transition:var(--transition);" title="Закрыть">➔</button>
+    <div
+      style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--color-border-light); padding-bottom:0.8rem; margin-bottom:1rem;">
+      <h3 id="cartDrawerTitle" style="margin:0; color:var(--color-primary-start); font-size:1.4rem; font-weight:800;">
+        Cart</h3>
+      <button id="closeCartBtn"
+        style="background:none; border:none; color:var(--color-primary-start); font-size:1.5rem; cursor:pointer; font-weight:bold; padding:0.2rem 0.5rem; transition:var(--transition);"
+        title="Close">➔</button>
     </div>
     <div id="cartItems" class="cart-items"></div>
-    <div class="cart-total"><span id="lblCartTotal">Итого</span>: <span id="cartTotal">$0.00</span></div>
-    <a href="checkout.html" class="checkout-btn" id="btnGoCheckout">Оформить заказ</a>
+    <div class="cart-total"><span id="lblCartTotal">Subtotal</span>: <span id="cartTotal">$0.00</span></div>
+    <a href="checkout.html" class="checkout-btn" id="btnGoCheckout">Go to Checkout</a>
   </div>
 
   <main class="main">
@@ -98,20 +237,39 @@
       <!-- Dynamic brand buttons inserted by app.js -->
     </section>
 
-    <!-- Point 2: Manufacturer filter row with "Все" button -->
-    <div style="margin-bottom:0.5rem; font-size:0.9rem; color:#aaa; font-weight:bold;" id="lblMfgTitle">Производители:</div>
+    <!-- Point 2: Manufacturer filter row with "All" button -->
+    <div style="margin-bottom:0.5rem; font-size:0.9rem; color:var(--color-muted); font-weight:bold;" id="lblMfgTitle">
+      Manufacturers:</div>
     <section class="brand-filter" id="manufacturerFilter" style="margin-bottom:1.5rem;">
       <!-- Dynamic manufacturer buttons inserted by app.js -->
     </section>
 
-    <section class="search-section" id="searchSection" style="margin: 1rem auto; max-width: 600px; padding: 0 1rem; display:flex; width:100%;">
+    <section class="search-section" id="searchSection"
+      style="margin: 1rem auto; max-width: 600px; padding: 0 1rem; display:flex; width:100%;">
       <div style="position:relative; width:100%;">
-        <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#888;">🔍</span>
-        <input type="text" id="searchInput" placeholder="Поиск товаров (например, Yamaha R1)..." style="width:100%; padding:0.8rem 1rem 0.8rem 2.5rem; border-radius:25px; border:1px solid #444; background:var(--color-surface); color:#fff; font-size:1rem; box-sizing:border-box; box-shadow:0 2px 10px rgba(0,0,0,0.2); outline:none;" />
-      </div>
+        <input type="text" id="searchInput" placeholder="Search products (e.g. Yamaha R1)..."
+          style="width:100%; padding:0.8rem 1rem 0.8rem 2.5rem; border-radius:var(--radius-md); border:1px solid var(--color-border); background:var(--color-surface); color:var(--color-text-bright); font-size:1rem; box-sizing:border-box; box-shadow:0 2px 10px rgba(0,0,0,0.2); outline:none;" />
     </section>
     <section class="product-grid" id="productGrid">
       <!-- Product cards inserted by app.js -->
+    </section>
+
+    <!-- Dedicated Articles Section -->
+    <section id="shopArticlesSection"
+      style="display:none; width:100%; max-width:1200px; margin:0 auto; padding:0 1rem 3rem 1rem;">
+      <div
+        style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+        <h2 id="articlesPageTitle" style="color:var(--color-text-bright); font-size:2rem; font-weight:800; margin:0;">📝
+          Articles & Reviews</h2>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <input type="text" id="articleSearchInput" placeholder="Search articles..."
+            style="padding:0.6rem 1rem; border-radius:var(--radius-md); border:1px solid var(--color-border); background:var(--color-surface); color:var(--color-text-bright); font-size:0.9rem; outline:none;" />
+        </div>
+      </div>
+      <div id="shopArticlesGrid"
+        style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:1.8rem;">
+        <!-- Filled dynamically by app.js -->
+      </div>
     </section>
   </main>
 
@@ -119,31 +277,132 @@
   <footer class="footer">
     <div class="footer-container">
       <div class="footer-col">
-        <h4 id="footerAboutTitle">О нас</h4>
-        <p id="footerAboutDesc">Brake Discs Store — премиальный производитель и дистрибьютор тормозных дисков для спортивных и дорожных мотоциклов. Высокое качество, износостойкость и надежность на любых треках.</p>
+        <h4 id="footerAboutTitle">About Us</h4>
+        <p id="footerAboutDesc">Brake Discs Store is a premium manufacturer and distributor of brake discs for sport and
+          street motorcycles. High quality, wear resistance and reliability on any track.</p>
       </div>
       <div class="footer-col">
-        <h4 id="footerLinksTitle">Разделы</h4>
+        <h4 id="footerLinksTitle">Links</h4>
         <ul>
-          <li><a href="#" id="footHome">Главная</a></li>
-          <li><a href="#" id="footCustom">Диски на заказ</a></li>
-          <li><a href="#" id="footAsk" onclick="document.getElementById('askQuestionBtn').click(); return false;">Задать вопрос</a></li>
+          <li><a href="#" id="footHome">Home</a></li>
+          <li><a href="/about.html">About Us</a></li>
+          <li><a href="#" id="footCustom">Custom Discs</a></li>
+          <li><a href="#" id="footArticles">Articles</a></li>
+          <li><a href="#" id="footAsk" onclick="document.getElementById('askQuestionBtn').click(); return false;">Ask
+              Question</a></li>
         </ul>
       </div>
       <div class="footer-col">
-        <h4 id="footerArticlesTitle">Статьи</h4>
+        <h4 id="footerArticlesTitle" style="cursor:pointer; text-decoration:underline;" title="View all articles">
+          Articles</h4>
         <ul id="footerArticlesList">
           <!-- Populated dynamically by app.js from superadmin settings -->
         </ul>
       </div>
       <div class="footer-col">
-        <h4 id="footerContactTitle">Контакты</h4>
-        <p id="footerContactEmail">Наша почта: <span id="siteEmail" style="color:var(--color-primary-start); font-weight:bold;">support@brakediscs.com</span></p>
+        <h4 id="footerContactTitle">Contacts</h4>
+        <p id="footerContactEmail"><span id="footerEmailLabel">Our email:</span> <span id="siteEmail"
+            style="color:var(--color-primary-start); font-weight:bold;">support@brakediscs.com</span></p>
         <p style="margin-top:1.5rem; font-size:0.8rem; color:#666;">© 2026 MotoBrake. All rights reserved.</p>
       </div>
     </div>
   </footer>
 
-  <script type="module" src="/app.js?v=5"></script>
+  <!-- Manufacturer Info Modal -->
+  <div class="modal" id="mfgInfoModal" style="display:none; z-index:4000;">
+    <div class="modal-content premium" style="max-width:550px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <div style="font-size: 2.2rem;">🏭</div>
+          <div>
+            <h2 id="mfgInfoTitle" class="modal-header-title">Manufacturer</h2>
+            <div id="mfgModalSubtitle" class="modal-header-sub" style="text-transform: uppercase; letter-spacing: 1px;">
+              Official workshop profile</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-body" style="display:flex; flex-direction:column; gap:1rem;">
+        <div class="mfg-card">
+          <div id="mfgLblDesc" class="mfg-lbl">📖 Description &amp; Technologies</div>
+          <div id="mfgInfoDesc" class="mfg-val">Loading...</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.8rem;">
+          <div class="mfg-card" style="align-items:center; justify-content:center;">
+            <div id="mfgLblWorkload" class="mfg-lbl">📊 Workload</div>
+            <div id="mfgInfoWorkloadBadge" class="stock-badge" style="display:inline-block; font-size: 0.85rem;">
+              <span id="mfgInfoWorkload">-</span>
+            </div>
+          </div>
+          <div class="mfg-card">
+            <div id="mfgLblMaterials" class="mfg-lbl">🛠️ Materials</div>
+            <div id="mfgInfoMaterials" class="mfg-val" style="font-weight: 500;">-</div>
+          </div>
+        </div>
+        <div class="mfg-card" style="gap: 0.6rem;">
+          <div>
+            <div id="mfgLblAddress" class="mfg-lbl">📍 Workshop Address</div>
+            <div id="mfgInfoAddress" class="mfg-val">-</div>
+          </div>
+          <div style="border-top: 1px solid var(--color-border-light); padding-top: 0.5rem; margin-top: 0.2rem;">
+            <div id="mfgLblContacts" class="mfg-lbl">📞 Contacts</div>
+            <div id="mfgInfoPhone" class="mfg-val" style="color: var(--color-primary-start); font-weight: bold;">-</div>
+          </div>
+        </div>
+
+        <!-- Articles Section inside Manufacturer Info Modal -->
+        <div style="border-top: 1px solid var(--color-border-light); padding-top:1rem; margin-top:0.5rem; display:none;"
+          id="mfgArticlesBlock">
+          <div id="mfgLblArticles" class="mfg-lbl" style="margin-bottom: 0.5rem;">📝 Workshop Articles &amp; Reviews
+          </div>
+          <div id="mfgArticlesList"
+            style="display:flex; flex-direction:column; gap:0.6rem; max-height:180px; overflow-y:auto; padding-right:0.3rem;">
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:0.6rem; margin-top:0.5rem; width:100%;">
+          <button type="button" id="mfgViewProductsBtn" class="primary-btn" style="background:#00b0ff;">🔍 View
+            Products</button>
+          <button type="button" id="mfgAskQuestionBtn" class="primary-btn">💬 Ask Manufacturer</button>
+          <button type="button" id="closeMfgInfoBtn" class="secondary-btn">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Article Reader Modal -->
+  <div class="modal" id="articleReaderModal" style="display:none; z-index:5000;">
+    <div class="modal-content premium"
+      style="max-width:700px; padding:2rem; display:flex; flex-direction:column; gap:1.2rem;">
+      <div
+        style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--color-border-light); padding-bottom:0.8rem;">
+        <span
+          style="font-size:0.85rem; color:var(--color-primary-start); font-weight:bold; text-transform:uppercase; letter-spacing:1px; cursor:pointer; text-decoration:underline;"
+          id="readerAuthor" title="Go to manufacturer">Author</span>
+        <button type="button" id="closeReaderBtn"
+          style="background:transparent; border:none; color:var(--color-text-bright); font-size:1.8rem; cursor:pointer; line-height:1; transition:var(--transition);">&times;</button>
+      </div>
+      <h1 id="readerTitle"
+        style="color:var(--color-text-bright); margin:0; font-size:1.8rem; font-weight:800; line-height:1.3;">Article
+        Title</h1>
+      <div style="font-size:0.8rem; color:var(--color-muted);" id="readerDate">Publication Date</div>
+      <img id="readerCover" src=""
+        style="width:100%; max-height:350px; object-fit:cover; border-radius:var(--radius-md); display:none;" />
+
+      <div id="readerContent" style="color:var(--color-text); font-size:1.05rem; line-height:1.6; font-family:inherit;">
+        <!-- Filled dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js?v=3"></script>
+  <script>
+    function toggleTheme() {
+      const root = document.documentElement;
+      const newTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+    }
+  </script>
 </body>
+
 </html>

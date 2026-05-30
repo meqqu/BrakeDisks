@@ -1,9 +1,12 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Детали товара – Brake Discs Store</title>
+  <title>Product Details – Brake Discs Store</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css" />
   <style>
     .product-details-container {
@@ -16,13 +19,262 @@
       box-shadow: var(--shadow);
       backdrop-filter: blur(10px);
     }
-    .product-image-large {
+
+    /* === GALLERY SECTION === */
+    .product-gallery {
       flex: 1;
-      max-width: 500px;
+      max-width: 520px;
+      display: flex;
+      gap: 0.8rem;
+    }
+
+    .gallery-thumbs-col {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 420px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: var(--color-primary-start) transparent;
+      padding-right: 0.3rem;
+    }
+
+    .gallery-thumbs-col::-webkit-scrollbar {
+      width: 4px;
+    }
+    .gallery-thumbs-col::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .gallery-thumbs-col::-webkit-scrollbar-thumb {
+      background: var(--color-primary-start);
+      border-radius: 4px;
+    }
+
+    .gallery-thumb {
+      width: 72px;
+      height: 72px;
+      border-radius: 10px;
+      object-fit: cover;
+      border: 2px solid rgba(255,255,255,0.08);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: var(--color-bg);
+      flex-shrink: 0;
+      opacity: 0.65;
+    }
+
+    .gallery-thumb:hover {
+      opacity: 1;
+      border-color:var(--color-muted);
+      transform: scale(1.05);
+    }
+
+    .gallery-thumb.active {
+      opacity: 1;
+      border-color: var(--color-primary-start);
+      box-shadow: 0 0 12px rgba(249, 115, 22, 0.35);
+    }
+
+    .gallery-main-wrap {
+      flex: 1;
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--color-bg);
+      cursor: zoom-in;
+    }
+
+    .product-image-large {
+      width: 100%;
+      height: 420px;
       border-radius: var(--radius);
       object-fit: cover;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      display: block;
+      transition: transform 0.4s ease;
     }
+
+    .gallery-main-wrap:hover .product-image-large {
+      transform: scale(1.02);
+    }
+
+    .gallery-zoom-hint {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      background:var(--color-modal-bg);
+      backdrop-filter: blur(6px);
+      color:var(--color-text-bright);
+      padding: 0.35rem 0.7rem;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    .gallery-main-wrap:hover .gallery-zoom-hint {
+      opacity: 1;
+    }
+
+    .gallery-counter {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background:var(--color-modal-bg);
+      backdrop-filter: blur(6px);
+      color:var(--color-text-bright);
+      padding: 0.3rem 0.6rem;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    /* === LIGHTBOX === */
+    .lightbox-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background:var(--color-modal-bg);
+      backdrop-filter: blur(20px);
+      z-index: 5000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      opacity: 0;
+      transition: opacity 0.35s ease;
+    }
+
+    .lightbox-overlay.visible {
+      opacity: 1;
+    }
+
+    .lightbox-image-wrap {
+      position: relative;
+      max-width: 90vw;
+      max-height: 80vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .lightbox-image {
+      max-width: 90vw;
+      max-height: 80vh;
+      object-fit: contain;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+      animation: lightboxFadeIn 0.4s ease;
+    }
+
+    @keyframes lightboxFadeIn {
+      from { transform: scale(0.9); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .lightbox-close {
+      position: fixed;
+      top: 20px;
+      right: 25px;
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
+      border:1px solid var(--color-border);
+      color:var(--color-text-bright);
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      font-size: 1.4rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.25s ease;
+      z-index: 5001;
+    }
+
+    .lightbox-close:hover {
+      background: rgba(255, 85, 0, 0.4);
+      border-color: var(--color-primary-start);
+      transform: scale(1.1);
+    }
+
+    .lightbox-nav {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      background:var(--color-input-bg);
+      backdrop-filter: blur(10px);
+      border:1px solid var(--color-border);
+      color:var(--color-text-bright);
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      font-size: 1.3rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.25s ease;
+      z-index: 5001;
+    }
+
+    .lightbox-nav:hover {
+      background: rgba(255, 85, 0, 0.35);
+      border-color: var(--color-primary-start);
+      transform: translateY(-50%) scale(1.1);
+    }
+
+    .lightbox-prev { left: 20px; }
+    .lightbox-next { right: 20px; }
+
+    .lightbox-counter {
+      color:var(--color-muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      letter-spacing: 1px;
+    }
+
+    .lightbox-thumbs {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      overflow-x: auto;
+      max-width: 90vw;
+      padding: 0.3rem;
+    }
+
+    .lightbox-thumb {
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      object-fit: cover;
+      cursor: pointer;
+      border: 2px solid transparent;
+      opacity: 0.5;
+      transition: all 0.25s ease;
+      flex-shrink: 0;
+    }
+
+    .lightbox-thumb:hover {
+      opacity: 0.85;
+    }
+
+    .lightbox-thumb.active {
+      opacity: 1;
+      border-color: var(--color-primary-start);
+      box-shadow: 0 0 10px rgba(249, 115, 22, 0.4);
+    }
+
+    /* === PRODUCT INFO === */
     .product-info-large {
       flex: 1;
       display: flex;
@@ -30,7 +282,7 @@
       gap: 1rem;
     }
     .brand-tag {
-      color: #aaa;
+      color:var(--color-muted);
       text-transform: uppercase;
       letter-spacing: 2px;
       font-size: 0.9rem;
@@ -48,7 +300,7 @@
     }
     .product-desc-large {
       font-size: 1.1rem;
-      color: #ccc;
+      color:var(--color-muted);
       line-height: 1.6;
     }
     .stock-status {
@@ -65,100 +317,190 @@
       padding: 1rem 2rem;
       font-size: 1.2rem;
     }
+
+    /* Single image (no gallery) */
+    .gallery-single .gallery-main-wrap {
+      width: 100%;
+    }
+
     @media (max-width: 768px) {
       .product-details-container { flex-direction: column; padding: 1rem; }
-      .product-image-large { max-width: 100%; }
+      .product-gallery { max-width: 100%; flex-direction: column-reverse; }
+      .gallery-thumbs-col {
+        flex-direction: row;
+        max-height: unset;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-right: 0;
+        padding-bottom: 0.3rem;
+      }
+      .gallery-thumb { width: 60px; height: 60px; }
+      .product-image-large { height: 300px; }
       .product-title { font-size: 1.8rem; }
     }
   </style>
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
 </head>
 <body>
   <!-- Header from index.html (simplified for inner pages) -->
   <header class="header">
-    <h1 class="logo">Brake Discs Store</h1>
+    <div style="display:flex; align-items:center; gap:0.5rem;">
+      <h1 class="logo">🏍️ MotoBrake <span class="logo-sub">Discs</span></h1>
+    </div>
     <nav class="nav" style="margin-left:auto; display:flex; align-items:center; gap:1rem;">
-      <a href="index.html" class="nav-link">← Вернуться в магазин</a>
-      <button class="nav-link" id="cartToggle" title="Корзина" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer;">🛒</button>
+      <a href="/index.html" class="nav-link">Home</a>
+      <a href="/about.html" class="nav-link">About Us</a>
+      <button class="nav-link" id="themeToggleBtn" title="Toggle Theme" onclick="toggleTheme()">🌓</button>
+      
+      <!-- User Menu -->
+      <div class="user-menu" style="position:relative;">
+        <button class="nav-link" id="userMenuBtn" title="Profile">
+          <span id="userMenuText">Sign In</span>
+          <span>👤</span>
+        </button>
+        <div id="userDropdown" class="user-dropdown" style="display:none;">
+          <div id="userInfo" class="dropdown-header" style="display:none;">Hello, Guest</div>
+          <button id="openLoginBtn"  class="dropdown-item" style="display:none;">Sign In / Register</button>
+          <a href="/account.html" class="dropdown-item" id="accountNav" style="display:none; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">👤 Profile</a>
+          <a href="/admin.html" class="dropdown-item admin-link" id="adminNav" style="display:none; color:var(--color-primary-start); padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">🏭 Warehouse</a>
+          <a href="/articles.html" class="dropdown-item" id="navArticles" style="display:none; color:#ff007f; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">📝 Articles</a>
+          <a href="/users.html" class="dropdown-item" id="navUsers" style="display:none; color:#00b0ff; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">👤 Users</a>
+          <a href="/settings.html" class="dropdown-item" id="navSettings" style="display:none; color:#00e676; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">⚙️ Site Settings</a>
+          <button id="logoutBtn"  class="dropdown-item" style="display:none;">Logout</button>
+        </div>
+      </div>
+
+      <button class="nav-link" id="cartToggle" title="Cart">🛒</button>
     </nav>
   </header>
 
   <!-- Cart Drawer -->
   <div id="cartDrawer" class="cart-drawer">
-    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:0.8rem; margin-bottom:1rem;">
-      <h3 style="margin:0; color:var(--color-primary-start); font-size:1.4rem; font-weight:800;">Корзина</h3>
-      <button id="closeCartBtn" style="background:none; border:none; color:var(--color-primary-start); font-size:1.5rem; cursor:pointer; font-weight:bold; padding:0.2rem 0.5rem; transition:var(--transition);" title="Закрыть">➔</button>
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--color-border); padding-bottom:0.8rem; margin-bottom:1rem;">
+      <h3 style="margin:0; color:var(--color-primary-start); font-size:1.4rem; font-weight:800;" id="drawerCartTitle">Your Cart</h3>
+      <button id="closeCartBtn" style="background:none; border:none; color:var(--color-primary-start); font-size:1.5rem; cursor:pointer; font-weight:bold; padding:0.2rem 0.5rem; transition:var(--transition);" title="Close">➔</button>
     </div>
     <div id="cartItems" class="cart-items"></div>
-    <div class="cart-total">Итого: <span id="cartTotal">$0.00</span></div>
-    <a href="checkout.html" class="checkout-btn">Оформить заказ</a>
+    <div class="cart-total"><span id="lblCartTotal">Subtotal:</span> <span id="cartTotal">$0.00</span></div>
+    <a href="checkout.html" class="checkout-btn" id="btnCheckout">Go to Checkout</a>
   </div>
 
   <main class="main" id="productMain">
-    <div style="text-align:center; padding:3rem;">Загрузка товара...</div>
+    <div style="text-align:center; padding:3rem;" id="productLoadingText">Loading product...</div>
   </main>
 
+  <!-- Lightbox Modal -->
+  <div class="lightbox-overlay" id="lightboxOverlay">
+    <button class="lightbox-close" id="lightboxClose" title="Close (Esc)">✕</button>
+    <button class="lightbox-nav lightbox-prev" id="lightboxPrev" title="Previous (←)">‹</button>
+    <button class="lightbox-nav lightbox-next" id="lightboxNext" title="Next (→)">›</button>
+    <div class="lightbox-image-wrap">
+      <img class="lightbox-image" id="lightboxImage" src="" alt="Enlarged photo" />
+    </div>
+    <div class="lightbox-counter" id="lightboxCounter"></div>
+    <div class="lightbox-thumbs" id="lightboxThumbs"></div>
+  </div>
+
   <!-- Manufacturer Info Modal -->
-  <div class="modal" id="mfgInfoModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:4000; align-items:center; justify-content:center; backdrop-filter:blur(8px);">
-    <div class="modal-content" style="background:var(--color-surface); padding:2rem; border-radius:var(--radius); max-width:450px; width:90%; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:1.2rem; border:1px solid rgba(255,255,255,0.08); overflow:hidden;">
-      <div style="background: linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); padding: 1.5rem; margin: -2rem -2rem 1rem -2rem; display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
+  <div class="modal" id="mfgInfoModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--color-modal-bg); z-index:4000; align-items:center; justify-content:center; backdrop-filter:blur(8px);">
+    <div class="modal-content" style="background:var(--color-surface); padding:2rem; border-radius:var(--radius); max-width:550px; width:90%; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:1.2rem; border:1px solid var(--color-border); overflow:hidden;">
+      <div style="background: linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); padding: 1.5rem; margin: -2rem -2rem 1rem -2rem; display: flex; align-items: center; gap: 1rem; border-bottom:1px solid var(--color-border);">
         <div style="font-size: 2.2rem;">🏭</div>
         <div>
-          <h2 id="mfgInfoTitle" style="color: #fff; margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: 0.5px;">Производитель</h2>
-          <div style="font-size: 0.8rem; color: rgba(255,255,255,0.8); margin-top: 0.2rem; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">Официальный профиль мастерской</div>
+          <h2 id="mfgInfoTitle" style="color:var(--color-text-bright); margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: 0.5px;">Manufacturer</h2>
+          <div id="mfgModalSubtitle" style="font-size: 0.8rem; color:var(--color-muted); margin-top: 0.2rem; text-transform: uppercase; font-weight: bold; letter-spacing: 1px;">Official workshop profile</div>
         </div>
       </div>
       <div style="display:flex; flex-direction:column; gap:1rem;">
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); padding: 1rem; border-radius: 8px;">
-          <div style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.3rem;">📖 Описание и технологии</div>
-          <div id="mfgInfoDesc" style="color: #eee; font-size: 0.95rem; line-height: 1.5;">Загрузка...</div>
+        <div style="background:var(--color-input-bg); border:1px solid var(--color-border); padding: 1rem; border-radius: 8px;">
+          <div id="mfgLblDesc" style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.3rem;">📖 Description &amp; Technologies</div>
+          <div id="mfgInfoDesc" style="color:var(--color-text); font-size: 0.95rem; line-height: 1.5;">Loading...</div>
         </div>
         <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.8rem;">
-          <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); padding: 0.8rem; border-radius: 8px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
-            <div style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.3rem;">📊 Загруженность</div>
+          <div style="background:var(--color-input-bg); border:1px solid var(--color-border); padding: 0.8rem; border-radius: 8px; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+            <div id="mfgLblWorkload" style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.3rem;">📊 Workload</div>
             <div id="mfgInfoWorkloadBadge" style="display:inline-block; font-size: 0.85rem; font-weight: bold; padding: 0.25rem 0.6rem; border-radius: 4px; text-align:center;">
               <span id="mfgInfoWorkload">-</span>
             </div>
           </div>
-          <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); padding: 0.8rem; border-radius: 8px;">
-            <div style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.3rem;">🛠️ Материалы</div>
-            <div id="mfgInfoMaterials" style="color: #eee; font-size: 0.9rem; font-weight: 500;">-</div>
+          <div style="background:var(--color-input-bg); border:1px solid var(--color-border); padding: 0.8rem; border-radius: 8px;">
+            <div id="mfgLblMaterials" style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.3rem;">🛠️ Materials</div>
+            <div id="mfgInfoMaterials" style="color:var(--color-text); font-size: 0.9rem; font-weight: 500;">-</div>
           </div>
         </div>
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); padding: 1rem; border-radius: 8px; display: flex; flex-direction: column; gap: 0.6rem;">
+        <div style="background:var(--color-input-bg); border:1px solid var(--color-border); padding: 1rem; border-radius: 8px; display: flex; flex-direction: column; gap: 0.6rem;">
           <div>
-            <div style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.2rem;">📍 Адрес мастерской</div>
-            <div id="mfgInfoAddress" style="color: #eee; font-size: 0.9rem;">-</div>
+            <div id="mfgLblAddress" style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.2rem;">📍 Workshop Address</div>
+            <div id="mfgInfoAddress" style="color:var(--color-text); font-size: 0.9rem;">-</div>
           </div>
-          <div style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 0.5rem; margin-top: 0.2rem;">
-            <div style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.2rem;">📞 Контакты</div>
+          <div style="border-top:1px solid var(--color-border); padding-top: 0.5rem; margin-top: 0.2rem;">
+            <div id="mfgLblContacts" style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.2rem;">📞 Contacts</div>
             <div id="mfgInfoPhone" style="color: var(--color-primary-start); font-size: 0.9rem; font-weight: bold;">-</div>
           </div>
         </div>
+        
+        <!-- Articles Section inside Manufacturer Info Modal -->
+        <div style="border-top:1px solid var(--color-border); padding-top:1rem; margin-top:0.5rem; display:none;" id="mfgArticlesBlock">
+          <div id="mfgLblArticles" style="font-size: 0.75rem; color: #888; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem;">📝 Workshop Articles &amp; Reviews</div>
+          <div id="mfgArticlesList" style="display:flex; flex-direction:column; gap:0.6rem; max-height:180px; overflow-y:auto; padding-right:0.3rem;"></div>
+        </div>
       </div>
       <div style="display:flex; flex-direction:column; gap:0.6rem; margin-top:0.5rem; width:100%;">
-        <button type="button" id="mfgAskQuestionBtn" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:0.9rem; border-radius:var(--radius); cursor:pointer; font-weight:bold; font-size:1.05rem; display:flex; align-items:center; justify-content:center; gap:0.5rem; transition:var(--transition); box-shadow: 0 4px 15px rgba(255,85,0,0.2); outline:none;">💬 Задать вопрос производителю</button>
-        <button type="button" id="closeMfgInfoBtn" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#fff; padding:0.8rem; border-radius:var(--radius); cursor:pointer; font-weight:bold; transition:var(--transition); text-align:center;">Закрыть</button>
+        <button type="button" id="mfgViewProductsBtn" style="background:#00b0ff; color:#fff; border:none; padding:0.9rem; border-radius:var(--radius); cursor:pointer; font-weight:bold; font-size:1.05rem; display:flex; align-items:center; justify-content:center; gap:0.5rem; transition:var(--transition); box-shadow: 0 4px 15px rgba(0,176,255,0.2); outline:none;">🔍 View Products</button>
+        <button type="button" id="mfgAskQuestionBtn" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:0.9rem; border-radius:var(--radius); cursor:pointer; font-weight:bold; font-size:1.05rem; display:flex; align-items:center; justify-content:center; gap:0.5rem; transition:var(--transition); box-shadow: 0 4px 15px rgba(255,85,0,0.2); outline:none;">💬 Ask Manufacturer</button>
+        <button type="button" id="closeMfgInfoBtn" style="background:var(--color-input-bg); border:1px solid var(--color-border); color:var(--color-text-bright); padding:0.8rem; border-radius:var(--radius); cursor:pointer; font-weight:bold; transition:var(--transition); text-align:center;">Close</button>
       </div>
     </div>
   </div>
 
   <!-- Ask Question Modal -->
-  <div class="modal" id="askProductModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:4000; align-items:center; justify-content:center; backdrop-filter:blur(8px);">
-    <div class="modal-content" style="background:var(--color-surface); padding:2rem; border-radius:var(--radius); max-width:450px; width:90%; box-shadow:var(--shadow); border:1px solid rgba(255,255,255,0.08);">
-      <h2 style="color:var(--color-primary-start); margin-top:0;" id="askProductTitle">Задать вопрос о товаре</h2>
-      <p id="askProductWarning" style="color:#ff5555; display:none; margin-bottom:1rem; font-size:0.9rem;">Пожалуйста, войдите в профиль или зарегистрируйтесь, чтобы задать вопрос.</p>
+  <div class="modal" id="askProductModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--color-modal-bg); z-index:4000; align-items:center; justify-content:center; backdrop-filter:blur(8px);">
+    <div class="modal-content" style="background:var(--color-surface); padding:2rem; border-radius:var(--radius); max-width:450px; width:90%; box-shadow:var(--shadow); border:1px solid var(--color-border);">
+      <h2 style="color:var(--color-primary-start); margin-top:0;" id="askProductTitle">Ask a Question</h2>
+      <p id="askProductWarning" style="color:#ff5555; display:none; margin-bottom:1rem; font-size:0.9rem;">Please login or register to ask a question.</p>
       <form id="askProductForm" style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
         <div style="display:none; flex-direction:column; gap:0.3rem;">
-          <label style="font-size:0.85rem; color:#aaa;">Кому задать вопрос (Производитель)</label>
+          <label style="font-size:0.85rem; color:var(--color-muted);">Recipient (Manufacturer)</label>
           <input type="text" id="askProductRecipient" readonly style="padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); font-family:inherit;" />
         </div>
-        <textarea id="askProductText" placeholder="Напишите ваш вопрос здесь..." required style="min-height:100px; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); font-family:inherit; resize:vertical;"></textarea>
-        <button type="submit" id="submitProductAskBtn" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:0.8rem; border-radius:var(--radius); cursor:pointer; font-weight:bold; transition:var(--transition);">Отправить</button>
-        <button type="button" id="closeProductAskBtn" style="background:transparent; color:var(--color-text); border:1px solid var(--color-muted); padding:0.6rem; border-radius:var(--radius); cursor:pointer;">Отмена</button>
+        <textarea id="askProductText" placeholder="Write your question here..." required style="min-height:100px; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); font-family:inherit; resize:vertical;"></textarea>
+        <button type="submit" id="submitProductAskBtn" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:0.8rem; border-radius:var(--radius); cursor:pointer; font-weight:bold; transition:var(--transition);">Send</button>
+        <button type="button" id="closeProductAskBtn" style="background:transparent; color:var(--color-text); border:1px solid var(--color-muted); padding:0.6rem; border-radius:var(--radius); cursor:pointer;">Cancel</button>
       </form>
     </div>
   </div>
 
-  <script type="module" src="/product.js?v=4"></script>
+  <!-- Article Reader Modal -->
+  <div class="modal" id="articleReaderModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--color-modal-bg); z-index:5000; align-items:center; justify-content:center; backdrop-filter:blur(10px);">
+    <div class="modal-content" style="background:var(--color-surface); padding:2rem; border-radius:var(--radius); max-width:700px; width:95%; max-height:90vh; overflow-y:auto; box-shadow:var(--shadow); border:1px solid var(--color-border); display:flex; flex-direction:column; gap:1.2rem;">
+      <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--color-border); padding-bottom:0.8rem;">
+        <span style="font-size:0.85rem; color:var(--color-primary-start); font-weight:bold; text-transform:uppercase; letter-spacing:1px; cursor:pointer; text-decoration:underline;" id="readerAuthor" title="Go to manufacturer">Author</span>
+        <button type="button" id="closeReaderBtn" style="background:transparent; border:none; color:var(--color-text-bright); font-size:1.8rem; cursor:pointer; line-height:1;">&times;</button>
+      </div>
+      <h1 id="readerTitle" style="color:var(--color-text-bright); margin:0; font-size:1.8rem; font-weight:800; line-height:1.3;">Article Title</h1>
+      <div style="font-size:0.8rem; color:#888;" id="readerDate">Publication Date</div>
+      <img id="readerCover" src="" style="width:100%; max-height:350px; object-fit:cover; border-radius:8px; display:none;" />
+      
+      <div id="readerContent" style="color:var(--color-text); font-size:1.05rem; line-height:1.6; font-family:inherit;">
+        <!-- Filled dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/product.js"></script>
+  <script type="module" src="/auth.js"></script>
+  <script>
+    function toggleTheme() {
+      const root = document.documentElement;
+      const newTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+    }
+  </script>
 </body>
 </html>

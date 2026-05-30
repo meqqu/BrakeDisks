@@ -1,6 +1,10 @@
 // admin.js – handles Products inventory, Support Chats with file attachment, dynamic Orders Table, resizable Excel SpreadSheet, and Superuser management
+import { serverSyncReady } from "./serverSync.js";
 import { ADMIN_PASSWORD } from "./config.js";
-import { openEditModal } from "./admin/editModal.js?v=4";
+import { openEditModal } from "./admin/editModal.js?v=2";
+import { detectBrand, generateSeoName, detectModelName, detectYears, generateSlug } from "./admin/aiHelper.js";
+import { initAccounting, renderAccounting, postOrderToAccounting, unpostOrderFromAccounting } from "./admin/accounting.js?v=2";
+import DOMPurify from 'https://esm.sh/dompurify';
 
 let currentLang = "ru";
 
@@ -35,6 +39,15 @@ const currentUser = JSON.parse(localStorage.getItem("brakeUser") || "{}");
 const userRole = localStorage.getItem("brakeRole") || "user";
 const manufacturerName = currentUser.manufacturer || "";
 
+// Force log out if blocked
+const allUsersCheck = JSON.parse(localStorage.getItem("brakeUsers") || "[]");
+const dbUser = allUsersCheck.find(u => u.username === currentUser.username);
+if (dbUser && dbUser.blocked) {
+  localStorage.removeItem("brakeUser");
+  localStorage.removeItem("brakeRole");
+  window.location.href = "index.html";
+}
+
 // Superadmin elements
 const superFilterContainer = document.getElementById("superadminManufacturerFilter");
 const superSelect = document.getElementById("superadminManufacturerSelect");
@@ -43,15 +56,31 @@ const superSelect = document.getElementById("superadminManufacturerSelect");
 const productsTab = document.getElementById("productsTab");
 const questionsTab = document.getElementById("questionsTab");
 const ordersTab = document.getElementById("ordersTab");
-const excelTab = document.getElementById("excelTab");
 const mfgInfoTab = document.getElementById("mfgInfoTab");
 const producersTab = document.getElementById("producersTab");
 const settingsTab = document.getElementById("settingsTab");
 
+// Article Management DOM
+const articlesTableBody = document.getElementById("articlesTableBody");
+const openAddArticleModalBtn = document.getElementById("openAddArticleModalBtn");
+const articleEditModal = document.getElementById("articleEditModal");
+const articleEditForm = document.getElementById("articleEditForm");
+const closeArticleModalBtn = document.getElementById("closeArticleModalBtn");
+const articleTitleInput = document.getElementById("articleTitleInput");
+const articleImageFile = document.getElementById("articleImageFile");
+const articleImagePreview = document.getElementById("articleImagePreview");
+const articleImageInput = document.getElementById("articleImageInput");
+const articleVideoInput = document.getElementById("articleVideoInput");
+const articleContentInput = document.getElementById("articleContentInput");
+const editArticleId = document.getElementById("editArticleId");
+const articleModalTitle = document.getElementById("articleModalTitle");
+
+const accountingTab = document.getElementById("accountingTab");
+
 const showProductsBtn = document.getElementById("showProductsBtn");
 const showQuestionsBtn = document.getElementById("showQuestionsBtn");
 const showOrdersBtn = document.getElementById("showOrdersBtn");
-const showExcelBtn = document.getElementById("showExcelBtn");
+const showOverallEstimateBtnSidebar = document.getElementById("showOverallEstimateBtnSidebar");
 const showMfgInfoBtn = document.getElementById("showMfgInfoBtn");
 const showProducersBtn = document.getElementById("showProducersBtn");
 const showSettingsBtn = document.getElementById("showSettingsBtn");
@@ -64,9 +93,6 @@ const adminChatForm = document.getElementById("adminChatForm");
 const adminChatInput = document.getElementById("adminChatInput");
 const adminChatFile = document.getElementById("adminChatFile");
 
-let excelData = {}; // Stores A1: val, D5: val etc
-let activeCellElement = null; // Stores active focus td element inside excel editor
-let excelSortState = { column: null, direction: "asc" }; // Interactive column sorting state
 let adminAttachedFile = null;
 
 // Toast helper
@@ -94,15 +120,15 @@ function initSuperadmin() {
         renderTable();
         renderQuestions();
         renderOrders();
-        renderExcelGrid();
+        renderAccounting();
+        renderArticlesList();
       });
     }
     
     // Show superuser tabs
-    if(showProducersBtn) showProducersBtn.style.display = "block";
-    if(showSettingsBtn) showSettingsBtn.style.display = "block";
     loadProducers();
     loadSiteSettings();
+    renderArticlesList();
   }
 }
 
@@ -122,7 +148,7 @@ function updateSuperadminDropdown() {
   const uniqueMfgs = [...new Set([...userMfgs, ...productMfgs, "Garage1"])];
   
   const currentVal = superSelect.value;
-  superSelect.innerHTML = '<option value="all">Все производители</option>' +
+  superSelect.innerHTML = '<option value="all">All manufacturers</option>' +
     uniqueMfgs.map(m => `<option value="${m}">${m}</option>`).join('');
   
   if (uniqueMfgs.includes(currentVal) || currentVal === "all") {
@@ -198,7 +224,7 @@ function customPrompt(message, defaultVal, callback) {
   btnRow.style.gap = "10px";
   
   const cancelBtn = document.createElement("button");
-  cancelBtn.textContent = currentLang === 'ru' ? "Отмена" : "Cancel";
+  cancelBtn.textContent = "Cancel";
   cancelBtn.style.padding = "8px 16px";
   cancelBtn.style.background = "#444";
   cancelBtn.style.color = "#fff";
@@ -275,7 +301,7 @@ function customConfirm(message, callback) {
   btnRow.style.gap = "10px";
   
   const cancelBtn = document.createElement("button");
-  cancelBtn.textContent = currentLang === 'ru' ? "Отмена" : "Cancel";
+  cancelBtn.textContent = "Cancel";
   cancelBtn.style.padding = "8px 16px";
   cancelBtn.style.background = "#444";
   cancelBtn.style.color = "#fff";
@@ -356,13 +382,13 @@ function renderTable() {
     }
     
     const badgeClass = p.stock ? 'in-stock' : 'out-of-stock';
-    const textStock = p.stock ? 'В наличии' : 'Под заказ';
+    const textStock = p.stock ? (p.stockCount !== undefined ? `In stock: ${p.stockCount}` : 'In stock') : 'On order';
     const textMfg = p.manufacturer || "Garage1";
     
     const isVisible = p.visible !== false;
     const visibilityBadge = isVisible
-      ? `<span class="stock-badge in-stock" style="font-size:0.75rem; padding:0.15rem 0.4rem; display:inline-block; margin-top:2px;">👁️ Активен</span>`
-      : `<span class="stock-badge out-of-stock" style="font-size:0.75rem; padding:0.15rem 0.4rem; display:inline-block; margin-top:2px; background:rgba(255,145,0,0.1); color:#ff9100;">🙈 Скрыт</span>`;
+      ? `<span class="stock-badge in-stock" style="font-size:0.75rem; padding:0.15rem 0.4rem; display:inline-block; margin-top:2px;">👁️ Active</span>`
+      : `<span class="stock-badge out-of-stock" style="font-size:0.75rem; padding:0.15rem 0.4rem; display:inline-block; margin-top:2px; background:rgba(255,145,0,0.1); color:#ff9100;">🙈 Hidden</span>`;
 
     tr.innerHTML = `
       <td style="padding-left: ${isChild ? '2rem' : '1rem'}">
@@ -370,8 +396,8 @@ function renderTable() {
           ${isChild ? `<span style="color:var(--color-primary-start); font-size:1.2rem;">↳</span>` : ''}
           <img src="${p.image}" alt="${p.name}" style="width:40px; height:40px; border-radius:4px; object-fit:cover;" />
           <div>
-            <div style="font-weight:bold; color:#fff;">${p.name}</div>
-            <div style="font-size:0.75rem; color:#aaa; display:flex; align-items:center; gap:0.4rem;">🏭 ${textMfg} ${visibilityBadge}</div>
+            <div style="font-weight:bold; color:var(--color-text-bright);">${p.name}</div>
+            <div style="font-size:0.75rem; color:var(--color-muted); display:flex; align-items:center; gap:0.4rem;">🏭 ${textMfg} ${visibilityBadge}</div>
           </div>
         </div>
       </td>
@@ -379,9 +405,9 @@ function renderTable() {
       <td><span class="stock-badge ${badgeClass}">${textStock}</span></td>
       <td style="font-weight:bold; color:var(--color-primary-start); font-size:1.1rem;">$${(p.price || 0).toFixed(2)}</td>
       <td>
-        <button class="edit-btn inline-toggle-visibility-btn" title="${isVisible ? 'Скрыть с сайта' : 'Показать на сайте'}" style="margin-right:0.2rem; background:${isVisible ? 'rgba(0,230,118,0.15)' : 'rgba(255,145,0,0.15)'}; border:1px solid ${isVisible ? '#00e676' : '#ff9100'}; padding:0.2rem 0.4rem; border-radius:4px; cursor:pointer;">${isVisible ? '👁️' : '🙈'}</button>
-        <button class="edit-btn inline-edit-btn" title="Редактировать">✏️</button>
-        <button class="delete-btn inline-delete-btn" title="Удалить">🗑️</button>
+        <button class="edit-btn inline-toggle-visibility-btn" title="${isVisible ? 'Hide from site' : 'Show on site'}" style="margin-right:0.2rem; background:${isVisible ? 'rgba(0,230,118,0.15)' : 'rgba(255,145,0,0.15)'}; border:1px solid ${isVisible ? '#00e676' : '#ff9100'}; padding:0.2rem 0.4rem; border-radius:4px; cursor:pointer;">${isVisible ? '👁️' : '🙈'}</button>
+        <button class="edit-btn inline-edit-btn" title="Edit">✏️</button>
+        <button class="delete-btn inline-delete-btn" title="Delete">🗑️</button>
       </td>
     `;
     
@@ -389,7 +415,7 @@ function renderTable() {
       p.visible = (p.visible !== false) ? false : true;
       localStorage.setItem("brakeProducts", JSON.stringify(products));
       loadProducts();
-      showToast(p.visible ? "Товар теперь виден на сайте!" : "Товар скрыт с сайта!");
+      showToast(p.visible ? "Product is now visible on the site!" : "Product hidden from the site!");
     });
 
     tr.querySelector(".inline-edit-btn").addEventListener("click", () => {
@@ -437,17 +463,17 @@ function renderTable() {
           localStorage.setItem("brakeProducts", JSON.stringify(products));
         }
         loadProducts();
-        showToast("Товар успешно сохранен!");
+        showToast("Product successfully saved!");
       });
     });
     
     tr.querySelector(".inline-delete-btn").addEventListener("click", () => {
-      customConfirm(currentLang === 'ru' ? `Удалить товар "${p.name}"?` : `Delete product "${p.name}"?`, (confirmed) => {
+      customConfirm(`Delete product "${p.name}"?`, (confirmed) => {
         if (confirmed) {
           products = products.filter(x => x.id !== p.id);
           localStorage.setItem("brakeProducts", JSON.stringify(products));
           loadProducts();
-          showToast("Товар удален!");
+          showToast("Product deleted!");
         }
       });
     });
@@ -511,8 +537,8 @@ function renderAddGalleryPreviews() {
   const urls = addGallery.value.split('\n').map(s => s.trim()).filter(Boolean);
   addGalleryPreviews.innerHTML = urls.map((url, idx) => `
     <div style="position:relative; width:40px; height:40px; flex-shrink:0;">
-      <img src="${url}" style="width:40px; height:40px; border-radius:4px; object-fit:cover; border:1px solid #555;" />
-      <span class="del-add-gallery-img" data-idx="${idx}" style="position:absolute; top:-4px; right:-4px; background:#ff1744; color:#fff; border-radius:50%; width:14px; height:14px; font-size:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; line-height:1;">×</span>
+      <img src="${url}" style="width:40px; height:40px; border-radius:4px; object-fit:cover; border:1px solid var(--color-border-strong);" />
+      <span class="del-add-gallery-img" data-idx="${idx}" style="position:absolute; top:-4px; right:-4px; background:#ff1744; color:var(--color-text-bright); border-radius:50%; width:14px; height:14px; font-size:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:bold; line-height:1;">×</span>
     </div>
   `).join('');
   
@@ -552,6 +578,116 @@ if (addGallery) {
   addGallery.addEventListener("input", renderAddGalleryPreviews);
 }
 
+// AI Button visual feedback
+function aiButtonPulse(btn, success) {
+  const origBg = btn.style.background;
+  btn.style.background = success
+    ? "linear-gradient(135deg, #00c853, #00e676)"
+    : "linear-gradient(135deg, #ff5252, #ff1744)";
+  btn.style.transform = "scale(1.05)";
+  setTimeout(() => {
+    btn.style.background = origBg;
+    btn.style.transform = "scale(1)";
+  }, 600);
+}
+
+const aiAddNameBtn = document.getElementById("aiAddNameBtn");
+const aiAddBrandBtn = document.getElementById("aiAddBrandBtn");
+const aiAddTitleBtn = document.getElementById("aiAddTitleBtn");
+const aiAddDescBtn = document.getElementById("aiAddDescBtn");
+const aiAddKeyBtn = document.getElementById("aiAddKeyBtn");
+const addMotoModel = document.getElementById("addMotoModel");
+const addMotoYears = document.getElementById("addMotoYears");
+
+if (addName) {
+  addName.addEventListener("input", () => {
+    const name = addName.value.trim();
+    if (name) {
+      const brand = addBrand.value.trim() || detectBrand(name) || "BrakeDiscs";
+      if (addSeoTitle) addSeoTitle.value = `Buy brake disc ${name} by ${brand} | Great price`;
+      if (addSeoDesc) addSeoDesc.value = `High quality brake disc for motorcycle ${name} by ${brand}. Reliable braking, long service life. Order right now!`;
+      if (addSeoKeywords) addSeoKeywords.value = `brake disc, ${brand}, ${name}, buy brakes`;
+    }
+  });
+}
+
+if (aiAddNameBtn) {
+  aiAddNameBtn.addEventListener("click", () => {
+    const raw = addName.value.trim();
+    if (!raw) { alert("Please enter the product name first"); return; }
+    const seoName = generateSeoName(raw);
+    addName.value = seoName;
+    aiButtonPulse(aiAddNameBtn, true);
+    
+    // Auto-detect brand, model, years
+    const brand = detectBrand(raw);
+    if (brand) addBrand.value = brand;
+
+    const modelName = detectModelName(raw);
+    if (modelName && addMotoModel) addMotoModel.value = modelName;
+
+    const years = detectYears(raw);
+    if (years && addMotoYears) addMotoYears.value = years;
+    
+    // Trigger SEO generation
+    addName.dispatchEvent(new Event("input"));
+  });
+}
+
+if (aiAddBrandBtn) {
+  aiAddBrandBtn.addEventListener("click", () => {
+    const name = addName.value.trim();
+    if (!name) { alert("Please enter the product name first"); return; }
+    const brand = detectBrand(name);
+    if (brand) {
+      addBrand.value = brand;
+      aiButtonPulse(aiAddBrandBtn, true);
+      
+      const modelName = detectModelName(name);
+      if (modelName && addMotoModel && !addMotoModel.value.trim()) {
+        addMotoModel.value = modelName;
+      }
+      const years = detectYears(name);
+      if (years && addMotoYears && !addMotoYears.value.trim()) {
+        addMotoYears.value = years;
+      }
+      
+      // Trigger SEO generation
+      addName.dispatchEvent(new Event("input"));
+    } else {
+      aiButtonPulse(aiAddBrandBtn, false);
+      alert("Could not detect brand. Try entering the full motorcycle model name.");
+    }
+  });
+}
+
+if (aiAddTitleBtn) {
+  aiAddTitleBtn.addEventListener("click", () => {
+    const name = addName.value.trim() || "Brake disc";
+    const brand = addBrand.value.trim() || "Unknown brand";
+    addSeoTitle.value = `Buy ${name} by ${brand} | Best price and quality`;
+    aiButtonPulse(aiAddTitleBtn, true);
+  });
+}
+
+if (aiAddDescBtn) {
+  aiAddDescBtn.addEventListener("click", () => {
+    const name = addName.value.trim() || "Brake disc";
+    const brand = addBrand.value.trim() || "Unknown brand";
+    addSeoDesc.value = `Looking where to buy ${name}? Original disc by ${brand} will provide your motorcycle with reliable braking and a long service life. Order now with delivery!`;
+    aiButtonPulse(aiAddDescBtn, true);
+  });
+}
+
+if (aiAddKeyBtn) {
+  aiAddKeyBtn.addEventListener("click", () => {
+    const name = addName.value.trim() || "Brake disc";
+    const brand = addBrand.value.trim() || "Unknown brand";
+    addSeoKeywords.value = `brake disc, ${brand}, ${name}, motorcycle parts, buy brakes, reliable discs`;
+    aiButtonPulse(aiAddKeyBtn, true);
+  });
+}
+
 if (addProductForm) {
   addProductForm.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -575,7 +711,7 @@ if (addProductForm) {
     }
 
     let masterMoto = "";
-    const dlaIdx = name.toLowerCase().lastIndexOf(" для ");
+    const dlaIdx = name.toLowerCase().lastIndexOf(" for ");
     if (dlaIdx !== -1) { 
       masterMoto = name.substring(dlaIdx + 5).trim();
     }
@@ -586,6 +722,7 @@ if (addProductForm) {
       id: Date.now(),
       groupId: groupId,
       name,
+      slug: generateSlug(name),
       motoModel: finalMoto,
       brand,
       price,
@@ -597,8 +734,8 @@ if (addProductForm) {
       visible: false, // Default invisible!
       seo: {
         title: addSeoTitle.value.trim() || name,
-        description: addSeoDesc.value.trim() || `Тормозной диск ${name} высокого качества.`,
-        keywords: addSeoKeywords.value.trim() || `${name}, тормозной диск`
+        description: addSeoDesc.value.trim() || `Brake disc ${name} of high quality.`,
+        keywords: addSeoKeywords.value.trim() || `${name}, brake disc`
       }
     };
     
@@ -610,6 +747,7 @@ if (addProductForm) {
         id: Date.now() + Math.floor(Math.random() * 1000000) + idx,
         name: moto,
         motoModel: moto,
+        slug: generateSlug(moto),
         visible: false
       });
     });
@@ -617,11 +755,11 @@ if (addProductForm) {
     localStorage.setItem("brakeProducts", JSON.stringify(products));
     loadProducts();
     addProductModal.style.display = "none";
-    showToast("Товар добавлен на склад (по умолчанию скрыт с сайта)!");
+    showToast("Product added to warehouse (hidden from site by default)!");
   });
 }
 
-// "Добавить еще товар" click handler (keeps modal open, resets fields)
+// "Add another product" click handler (keeps modal open, resets fields)
 const addAndContinueBtn = document.getElementById("addAndContinueBtn");
 if (addAndContinueBtn) {
   addAndContinueBtn.addEventListener("click", () => {
@@ -649,7 +787,7 @@ if (addAndContinueBtn) {
     }
 
     let masterMoto = "";
-    const dlaIdx = name.toLowerCase().lastIndexOf(" для ");
+    const dlaIdx = name.toLowerCase().lastIndexOf(" for ");
     if (dlaIdx !== -1) { 
       masterMoto = name.substring(dlaIdx + 5).trim();
     }
@@ -671,8 +809,8 @@ if (addAndContinueBtn) {
       visible: false, // Default invisible!
       seo: {
         title: addSeoTitle.value.trim() || name,
-        description: addSeoDesc.value.trim() || `Тормозной диск ${name} высокого качества.`,
-        keywords: addSeoKeywords.value.trim() || `${name}, тормозной диск`
+        description: addSeoDesc.value.trim() || `Brake disc ${name} of high quality.`,
+        keywords: addSeoKeywords.value.trim() || `${name}, brake disc`
       }
     };
     
@@ -690,7 +828,7 @@ if (addAndContinueBtn) {
 
     localStorage.setItem("brakeProducts", JSON.stringify(products));
     loadProducts();
-    showToast("Товар добавлен на склад! Заполните карточку следующего.");
+    showToast("Product added to warehouse! Fill out the next card.");
     
     // Clear and reset form fields for next item
     addProductForm.reset();
@@ -700,7 +838,7 @@ if (addAndContinueBtn) {
   });
 }
 
-// "Предварительный просмотр" (Preview Card) click handler
+// "Preview" (Preview Card) click handler
 const previewAddProductBtn = document.getElementById("previewAddProductBtn");
 const productPreviewModal = document.getElementById("productPreviewModal");
 const previewCardContainer = document.getElementById("previewCardContainer");
@@ -708,8 +846,8 @@ const closePreviewBtn = document.getElementById("closePreviewBtn");
 
 if (previewAddProductBtn && productPreviewModal && previewCardContainer) {
   previewAddProductBtn.addEventListener("click", () => {
-    const name = addName.value.trim() || "Пример тормозного диска";
-    const brand = addBrand.value.trim() || "Категория / Бренд";
+    const name = addName.value.trim() || "Example brake disc";
+    const brand = addBrand.value.trim() || "Category / Brand";
     const price = parseFloat(addPrice.value) || 0.00;
     const img = addImage.value.trim() || addImgPreview.src;
     const stock = addStock.checked;
@@ -717,22 +855,22 @@ if (previewAddProductBtn && productPreviewModal && previewCardContainer) {
     const activeMfg = getActiveManufacturer();
     const resolvedMfg = activeMfg === "all" ? "Garage1" : activeMfg;
 
-    const stockText = stock ? "В наличии" : "Под заказ";
+    const stockText = stock ? "In stock" : "On order";
     const stockClass = stock ? "stock-yes" : "stock-no";
 
     previewCardContainer.innerHTML = `
-      <div class="product-card" style="margin:0 auto; background:var(--color-surface); border:1px solid rgba(255,255,255,0.15); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); width:100%;">
+      <div class="product-card" style="margin:0 auto; background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow); width:100%;">
         <img src="${img}" alt="${name}" style="width:100%; height:200px; object-fit:cover;" />
         <div class="product-info" style="padding:1.2rem;">
           <div class="product-brand" style="font-size:0.75rem; text-transform:uppercase; color:var(--color-primary-start); font-weight:bold; letter-spacing:1px;">${brand}</div>
-          <h3 class="product-title" style="font-size:1.15rem; font-weight:600; color:#fff; margin:0.4rem 0 0.3rem 0; line-height:1.4;">${name}</h3>
-          <div style="font-size:0.75rem; color:#aaa; font-weight:600; margin-top:2px;">🏭 ${resolvedMfg}</div>
+          <h3 class="product-title" style="font-size:1.15rem; font-weight:600; color:var(--color-text-bright); margin:0.4rem 0 0.3rem 0; line-height:1.4;">${name}</h3>
+          <div style="font-size:0.75rem; color:var(--color-muted); font-weight:600; margin-top:2px;">🏭 ${resolvedMfg}</div>
           <div style="display:flex; align-items:center; gap:0.5rem; margin-top:0.5rem;">
             <span class="product-stock ${stockClass}" style="font-size:0.75rem; padding:0.2rem 0.5rem; border-radius:4px; font-weight:bold;">${stockText}</span>
           </div>
           <div class="product-price" style="font-size:1.4rem; font-weight:bold; color:var(--color-primary-start); margin-top:0.8rem;">$${price.toFixed(2)}</div>
         </div>
-        <button class="add-to-cart-btn" style="width:100%; padding:0.9rem; background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; font-weight:bold; cursor:default;">Купить</button>
+        <button class="add-to-cart-btn" style="width:100%; padding:0.9rem; background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; font-weight:bold; cursor:default;">Buy</button>
       </div>
     `;
     productPreviewModal.style.display = "flex";
@@ -748,57 +886,70 @@ if (closePreviewBtn && productPreviewModal) {
 // Tab switcher
 const showAiAnalyticsBtn = document.getElementById("showAiAnalyticsBtn");
 const aiAnalyticsTab = document.getElementById("aiAnalyticsTab");
+const showArticlesBtn = document.getElementById("showArticlesBtn");
+const articlesTab = document.getElementById("articlesTab");
 
 function switchTab(tab) {
-  productsTab.style.display = tab === "products" ? "block" : "none";
-  questionsTab.style.display = tab === "questions" ? "block" : "none";
-  ordersTab.style.display = tab === "orders" ? "block" : "none";
-  excelTab.style.display = tab === "excel" ? "block" : "none";
+  if(productsTab) productsTab.style.display = tab === "products" ? "block" : "none";
+  if(questionsTab) questionsTab.style.display = tab === "questions" ? "block" : "none";
+  if(ordersTab) ordersTab.style.display = tab === "orders" ? "block" : "none";
   
   if(aiAnalyticsTab) aiAnalyticsTab.style.display = tab === "aiAnalytics" ? "block" : "none";
   if(mfgInfoTab) mfgInfoTab.style.display = tab === "mfgInfo" ? "block" : "none";
   if(producersTab) producersTab.style.display = tab === "producers" ? "block" : "none";
   if(settingsTab) settingsTab.style.display = tab === "settings" ? "block" : "none";
+  if(articlesTab) articlesTab.style.display = tab === "articles" ? "block" : "none";
+  if(accountingTab) accountingTab.style.display = tab === "accounting" ? "block" : "none";
   
   // Highlight active buttons
-  const buttons = [showProductsBtn, showQuestionsBtn, showOrdersBtn, showExcelBtn, showAiAnalyticsBtn, showMfgInfoBtn, showProducersBtn, showSettingsBtn];
+  const buttons = [showProductsBtn, showQuestionsBtn, showOrdersBtn, showAiAnalyticsBtn, showMfgInfoBtn, showProducersBtn, showSettingsBtn, showArticlesBtn, showOverallEstimateBtnSidebar];
   buttons.forEach(b => {
     if (b) b.classList.remove("active");
   });
   
-  if (tab === "products") showProductsBtn.classList.add("active");
-  if (tab === "questions") showQuestionsBtn.classList.add("active");
-  if (tab === "orders") showOrdersBtn.classList.add("active");
-  if (tab === "excel") showExcelBtn.classList.add("active");
+  if (tab === "products" && showProductsBtn) showProductsBtn.classList.add("active");
+  if (tab === "questions" && showQuestionsBtn) showQuestionsBtn.classList.add("active");
+  if (tab === "orders" && showOrdersBtn) showOrdersBtn.classList.add("active");
   if (tab === "aiAnalytics" && showAiAnalyticsBtn) showAiAnalyticsBtn.classList.add("active");
   if (tab === "mfgInfo" && showMfgInfoBtn) showMfgInfoBtn.classList.add("active");
   if (tab === "producers" && showProducersBtn) showProducersBtn.classList.add("active");
   if (tab === "settings" && showSettingsBtn) showSettingsBtn.classList.add("active");
+  if (tab === "articles" && showArticlesBtn) showArticlesBtn.classList.add("active");
+  if (tab === "accounting" && showOverallEstimateBtnSidebar) showOverallEstimateBtnSidebar.classList.add("active");
   
   if (tab === "questions") renderQuestions();
   if (tab === "orders") renderOrders();
-  if (tab === "excel") renderExcelGrid();
   if (tab === "aiAnalytics") renderAiAnalytics();
   if (tab === "mfgInfo") loadMfgInfo();
   if (tab === "producers") loadProducers();
+  if (tab === "articles") renderArticlesList();
+  if (tab === "accounting") renderAccounting();
 }
 
-showProductsBtn.addEventListener("click", () => switchTab("products"));
-showQuestionsBtn.addEventListener("click", () => switchTab("questions"));
-showOrdersBtn.addEventListener("click", () => switchTab("orders"));
-showExcelBtn.addEventListener("click", () => switchTab("excel"));
+if (showProductsBtn) showProductsBtn.addEventListener("click", () => switchTab("products"));
+if (showQuestionsBtn) showQuestionsBtn.addEventListener("click", () => switchTab("questions"));
+if (showOrdersBtn) showOrdersBtn.addEventListener("click", () => switchTab("orders"));
+if (showOverallEstimateBtnSidebar) {
+  showOverallEstimateBtnSidebar.addEventListener("click", () => {
+    switchTab("accounting");
+  });
+}
 if (showAiAnalyticsBtn) showAiAnalyticsBtn.addEventListener("click", () => switchTab("aiAnalytics"));
 if (showMfgInfoBtn) showMfgInfoBtn.addEventListener("click", () => switchTab("mfgInfo"));
 if (showProducersBtn) showProducersBtn.addEventListener("click", () => switchTab("producers"));
 if (showSettingsBtn) showSettingsBtn.addEventListener("click", () => switchTab("settings"));
+if (showArticlesBtn) showArticlesBtn.addEventListener("click", () => switchTab("articles"));
 
 // --- Point 7: Support Chats & File Previews ---
 let currentActiveUser = null;
+let currentActiveMfg = null;
 
 function renderQuestions() {
-  const CHAT_KEY = "brakeMessages";
-  const allMsgs = JSON.parse(localStorage.getItem(CHAT_KEY) || "[]");
-  const activeMfg = getActiveManufacturer();
+  if (!dialogsListEl) return;
+  fetch('/api/chat', {credentials: 'include'})
+    .then(r => r.json())
+    .then(allMsgs => {
+      const activeMfg = getActiveManufacturer();
   
   const filteredMsgs = allMsgs.filter(m => {
     const mMfg = m.manufacturer || "Garage1";
@@ -808,40 +959,45 @@ function renderQuestions() {
   
   const usersMap = {};
   filteredMsgs.forEach(m => {
-    if (!usersMap[m.username]) {
-      usersMap[m.username] = { msgs: [], unread: 0 };
+    const mMfg = m.manufacturer || "Garage1";
+    const key = `${m.username} ↔ ${mMfg}`;
+    if (!usersMap[key]) {
+      usersMap[key] = { key, username: m.username, manufacturer: mMfg, msgs: [], unread: 0 };
     }
-    usersMap[m.username].msgs.push(m);
+    usersMap[key].msgs.push(m);
     if (!m.readByAdmin && m.sender === 'user') {
-      usersMap[m.username].unread++;
+      usersMap[key].unread++;
     }
   });
   
-  const usernames = Object.keys(usersMap);
-  if (usernames.length === 0) {
-    dialogsListEl.innerHTML = `<div style="padding:1rem; color:#aaa; text-align:center;">Нет диалогов</div>`;
+  const dialogKeys = Object.keys(usersMap);
+  if (dialogKeys.length === 0) {
+    dialogsListEl.innerHTML = `<div style="padding:1rem; color:var(--color-muted); text-align:center;">No dialogs</div>`;
     adminChatContainer.style.visibility = 'hidden';
     return;
   }
   
-  dialogsListEl.innerHTML = usernames.map(u => {
-    const userObj = usersMap[u];
+  dialogsListEl.innerHTML = dialogKeys.map(k => {
+    const userObj = usersMap[k];
     const unreadBadge = userObj.unread > 0 ? `<span style="background:#ff5252; color:#fff; border-radius:50%; padding:0.1rem 0.5rem; font-size:0.8rem;">${userObj.unread}</span>` : '';
-    const isActive = u === currentActiveUser ? 'background:rgba(255,255,255,0.08);' : '';
+    const isActive = (userObj.username === currentActiveUser && userObj.manufacturer === currentActiveMfg) ? 'background:var(--color-input-bg);' : '';
     const lastMsg = userObj.msgs[userObj.msgs.length - 1];
     const snippet = lastMsg.text.length > 25 ? lastMsg.text.substring(0, 25) + '...' : lastMsg.text;
     const time = new Date(lastMsg.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
     
     return `
-      <div class="dialog-item" data-user="${u}" style="padding:1rem; border-bottom:1px solid rgba(255,255,255,0.08); cursor:pointer; display:flex; flex-direction:column; gap:0.4rem; transition:background 0.2s; ${isActive}">
+      <div class="dialog-item" data-user="${userObj.username}" data-mfg="${userObj.manufacturer}" style="padding:1rem; border-bottom:1px solid var(--color-border); cursor:pointer; display:flex; flex-direction:column; gap:0.4rem; transition:background 0.2s; ${isActive}">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div>👤 <strong>${u}</strong></div>
+          <div>
+            👤 <strong>${userObj.username}</strong>
+            <span style="background:rgba(255,255,255,0.1); color:var(--color-text-bright); font-size:0.75rem; padding:0.15rem 0.4rem; border-radius:4px; margin-left:0.5rem; border:1px solid var(--color-border);">🏭 ${userObj.manufacturer}</span>
+          </div>
           <div style="display:flex; align-items:center; gap:0.5rem;">
-            <span style="font-size:0.8rem; color:#aaa;">${time}</span>
+            <span style="font-size:0.8rem; color:var(--color-muted);">${time}</span>
             ${unreadBadge}
           </div>
         </div>
-        <div style="font-size:0.85rem; color:#ccc;">${lastMsg.sender === 'admin' ? 'Вы: ' : ''}${snippet}</div>
+        <div style="font-size:0.85rem; color:var(--color-muted);">${lastMsg.sender === 'admin' ? 'You: ' : ''}${snippet}</div>
       </div>
     `;
   }).join("");
@@ -849,14 +1005,15 @@ function renderQuestions() {
   document.querySelectorAll('.dialog-item').forEach(item => {
     item.addEventListener('click', () => {
       currentActiveUser = item.dataset.user;
+      currentActiveMfg = item.dataset.mfg;
       renderAdminChat();
-      renderQuestions();
     });
   });
   
-  if (currentActiveUser) {
-    renderAdminChat();
+  if (currentActiveUser && currentActiveMfg) {
+    renderAdminChat(allMsgs);
   }
+  }).catch(console.error);
 }
 
 // Chat File attachment selection
@@ -864,6 +1021,11 @@ if (adminChatFile) {
   adminChatFile.addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert("File size exceeds 2MB limit!");
+        adminChatFile.value = "";
+        return;
+      }
       const r = new FileReader();
       r.onload = (event) => {
         adminAttachedFile = {
@@ -871,7 +1033,7 @@ if (adminChatFile) {
           name: file.name,
           type: file.type
         };
-        showToast(`Файл прикреплен: ${file.name}`);
+        showToast(`File attached: ${file.name}`);
       };
       r.readAsDataURL(file);
     } else {
@@ -880,95 +1042,125 @@ if (adminChatFile) {
   });
 }
 
-function renderAdminChat() {
-  if (!currentActiveUser) return;
+function renderAdminChat(allMsgs) {
+  if (!currentActiveUser || !currentActiveMfg) return;
   adminChatContainer.style.visibility = 'visible';
-  activeChatUser.textContent = `Диалог: ${currentActiveUser}`;
+  activeChatUser.innerHTML = `👤 <strong>${currentActiveUser}</strong> <span style="font-size:0.85rem; color:var(--color-muted); margin-left:0.5rem;">dialog with 🏭 ${currentActiveMfg}</span>`;
   
-  const CHAT_KEY = "brakeMessages";
-  const allMsgs = JSON.parse(localStorage.getItem(CHAT_KEY) || "[]");
-  const activeMfg = getActiveManufacturer();
-  
-  let changed = false;
-  allMsgs.forEach(m => {
-    const mMfg = m.manufacturer || "Garage1";
-    const matchesMfg = activeMfg === "all" || mMfg === activeMfg;
-    if (m.username === currentActiveUser && m.sender === 'user' && !m.readByAdmin && matchesMfg) {
-      m.readByAdmin = true;
-      changed = true;
-    }
-  });
-  if (changed) {
-    localStorage.setItem(CHAT_KEY, JSON.stringify(allMsgs));
-  }
-  
-  const userMsgs = allMsgs.filter(m => {
-    const mMfg = m.manufacturer || "Garage1";
-    const matchesMfg = activeMfg === "all" || mMfg === activeMfg;
-    return m.username === currentActiveUser && matchesMfg;
-  });
-  
-  adminChatMessages.innerHTML = userMsgs.map(m => {
-    let fileHtml = "";
-    if (m.file) {
-      if (m.fileType && m.fileType.startsWith("image/")) {
-        fileHtml = `<div style="margin-top:0.5rem;"><img src="${m.file}" alt="preview" style="max-height:150px; border-radius:8px; border:1px solid #444; display:block; cursor:pointer;" onclick="window.open('${m.file}')" /></div>`;
-      } else {
-        fileHtml = `<div style="margin-top:0.5rem;"><a href="${m.file}" download="${m.fileName || 'file'}" style="color:#00b0ff; text-decoration:underline; font-size:0.85rem; display:inline-flex; align-items:center; gap:0.3rem;">📎 ${m.fileName || 'Файл'}</a></div>`;
+  const proceedRender = (msgs) => {
+    const userMsgs = msgs.filter(m => {
+      const mMfg = m.manufacturer || "Garage1";
+      return m.username === currentActiveUser && mMfg === currentActiveMfg;
+    });
+    
+    adminChatMessages.innerHTML = userMsgs.map(m => {
+      let fileHtml = "";
+      if (m.file && typeof m.file === 'string' && m.file.startsWith('data:')) {
+        const safeFile = DOMPurify.sanitize(m.file, { ALLOWED_ATTR: ['href', 'src', 'download'] });
+        const safeName = DOMPurify.sanitize(m.fileName || 'file');
+        if (m.fileType && m.fileType.startsWith("image/")) {
+          fileHtml = `<div style="margin-top:0.5rem;"><img src="${m.file}" alt="preview" style="max-height:150px; border-radius:var(--radius); border:1px solid var(--color-border); display:block;" /></div>`;
+        } else {
+          fileHtml = `<div style="margin-top:0.5rem;"><a href="${m.file}" download="${safeName}" style="color:#00b0ff; text-decoration:underline; font-size:0.85rem; display:inline-flex; align-items:center; gap:0.3rem;">📎 ${safeName}</a></div>`;
+        }
       }
-    }
 
-    return `
-      <div style="max-width:75%; padding:0.8rem 1.2rem; border-radius:18px; font-size:0.95rem; line-height:1.4; 
-                  ${m.sender === 'admin' ? 'align-self:flex-end; background:var(--color-primary-start); color:#fff; border-bottom-right-radius:4px;' 
-                                         : 'align-self:flex-start; background:#333; color:#fff; border-bottom-left-radius:4px;'}">
-        <div>${m.text}</div>
-        ${fileHtml}
-        <div style="font-size:0.75rem; color:rgba(255,255,255,0.6); margin-top:0.4rem; text-align:right;">
-          ${new Date(m.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+      const safeText = DOMPurify.sanitize(m.text);
+      return `
+        <div style="max-width:75%; padding:0.8rem 1.2rem; border-radius:18px; font-size:0.95rem; line-height:1.4; 
+                    ${m.sender === 'admin' ? 'align-self:flex-end; background:var(--color-primary-start); color:#fff; border-bottom-right-radius:4px;' 
+                                           : 'align-self:flex-start; background:var(--color-border); color:var(--color-text-bright); border-bottom-left-radius:4px;'}">
+          <div>${safeText}</div>
+          ${fileHtml}
+          <div style="font-size:0.75rem; color:var(--color-muted); margin-top:0.4rem; text-align:right;">
+            ${new Date(m.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+          </div>
         </div>
-      </div>
-    `;
-  }).join("");
-  
-  adminChatMessages.scrollTop = adminChatMessages.scrollHeight;
+      `;
+    }).join("");
+    
+    adminChatMessages.scrollTop = adminChatMessages.scrollHeight;
+  };
+
+  fetch('/api/chat/read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ targetUser: currentActiveUser, manufacturer: currentActiveMfg })
+  }).then(() => {
+    if (allMsgs) {
+      proceedRender(allMsgs);
+    } else {
+      fetch('/api/chat', {credentials: 'include'}).then(r => r.json()).then(msgs => {
+        proceedRender(msgs);
+      });
+    }
+  }).catch(console.error);
 }
 
 if (adminChatForm) {
   adminChatForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    if (!currentActiveUser) return;
+    if (!currentActiveUser || !currentActiveMfg) return;
     const text = adminChatInput.value.trim();
     if (!text && !adminAttachedFile) return;
     
-    const CHAT_KEY = "brakeMessages";
-    const allMsgs = JSON.parse(localStorage.getItem(CHAT_KEY) || "[]");
-    const activeMfg = getActiveManufacturer();
-    const resolvedMfg = activeMfg === "all" ? "Garage1" : activeMfg;
-    
-    allMsgs.push({
-      id: Date.now(),
-      username: currentActiveUser,
-      sender: "admin",
-      text: text || (adminAttachedFile ? `Прикреплен файл: ${adminAttachedFile.name}` : ""),
-      date: new Date().toISOString(),
-      manufacturer: resolvedMfg,
+    const payload = {
+      text: text,
+      targetUser: currentActiveUser,
+      manufacturer: currentActiveMfg,
       file: adminAttachedFile ? adminAttachedFile.data : null,
       fileName: adminAttachedFile ? adminAttachedFile.name : null,
       fileType: adminAttachedFile ? adminAttachedFile.type : null
-    });
+    };
     
-    localStorage.setItem(CHAT_KEY, JSON.stringify(allMsgs));
-    adminChatInput.value = "";
-    if (adminChatFile) adminChatFile.value = "";
-    adminAttachedFile = null;
-    renderAdminChat();
-    renderQuestions();
+    fetch('/api/chat/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload)
+    }).then(r => r.json()).then(res => {
+      if (res.success) {
+        adminChatInput.value = "";
+        if (adminChatFile) adminChatFile.value = "";
+        adminAttachedFile = null;
+        renderAdminChat();
+        renderQuestions();
+      } else {
+        showToast(res.error || "Failed to send message");
+      }
+    });
   });
 }
 
 // --- Orders System & Custom Columns Delete ---
 let customCols = JSON.parse(localStorage.getItem("brakeOrderCols") || "[]");
+if (customCols && customCols.length > 0) {
+  let hasRussian = false;
+  const colTranslations = {
+    "Трек-номер": "Tracking Number",
+    "Телефон": "Phone",
+    "Адрес": "Address",
+    "Комментарий": "Comment",
+    "Статус": "Status",
+    "Сумма": "Total",
+    "Дата": "Date",
+    "Клиент": "Customer"
+  };
+  customCols = customCols.map(c => {
+    if (colTranslations[c.name]) {
+      hasRussian = true;
+      return { ...c, name: colTranslations[c.name] };
+    } else if (/[а-яА-ЯёЁ]/.test(c.name)) {
+      hasRussian = true;
+      return { ...c, name: c.name.replace(/[а-яА-ЯёЁ]+/g, "Info") };
+    }
+    return c;
+  });
+  if (hasRussian) {
+    localStorage.setItem("brakeOrderCols", JSON.stringify(customCols));
+  }
+}
 const ordersTableHeader = document.getElementById("ordersTableHeader");
 const ordersTableBody = document.getElementById("ordersTableBody");
 
@@ -999,9 +1191,193 @@ if(chatWithClientBtn) {
     clientInfoModal.style.display = 'none';
     switchTab("questions");
     currentActiveUser = clientUsername;
+    const activeMfg = getActiveManufacturer();
+    currentActiveMfg = activeMfg === "all" ? "Administration (Superuser)" : activeMfg;
     renderQuestions();
   });
 }
+
+const statusColorsMap = {
+  "paid": "#ffb300",
+  "processing": "#1e88e5",
+  "shipped": "#43a047",
+  "delivered": "#00e676",
+  "cancelled": "#ff5252"
+};
+
+function openOrderDetails(orderId) {
+  const orders = JSON.parse(localStorage.getItem("brakeOrders") || "[]");
+  const clients = JSON.parse(localStorage.getItem("brakeClients") || "[]");
+  const activeMfg = getActiveManufacturer();
+  
+  const o = orders.find(x => x.id == orderId);
+  if (!o) return;
+  
+  const cl = clients.find(c => c.id === o.customerId) || o.customer || {};
+  const statusLabels = { paid: "Paid", processing: "Processing", shipped: "Shipped", delivered: "Delivered", cancelled: "Cancelled" };
+  const statusColor = statusColorsMap[o.status] || '#555';
+  
+  orderModalId.textContent = `Order #${o.id}`;
+  orderModalStatus.textContent = statusLabels[o.status] || o.status;
+  orderModalStatus.style.background = statusColor;
+  
+  const viewableItems = o.items.filter(item => {
+    if (activeMfg === "all") return true;
+    const p = products.find(prod => prod.id == item.id);
+    const pMfg = p ? (p.manufacturer || "Garage1") : "Garage1";
+    return pMfg === activeMfg;
+  });
+  
+  let itemsHtml = viewableItems.map(item => `
+    <div style="display:flex; justify-content:space-between; align-items:center; background:var(--color-input-bg); padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border);">
+      <div>
+        <div style="font-weight:bold; color:var(--color-text-bright);">${item.name}</div>
+        <div style="font-size:0.8rem; color:var(--color-muted);">Quantity: ${item.qty}</div>
+      </div>
+      <div style="font-weight:bold; color:var(--color-primary-start);">$${((item.price || 0) * item.qty).toFixed(2)}</div>
+    </div>
+  `).join("");
+  
+  let localTotal = o.total;
+  if (activeMfg !== "all") {
+    const mfgTotal = viewableItems.reduce((sum, it) => sum + ((it.price || 0) * it.qty), 0);
+    localTotal = `$${mfgTotal.toFixed(2)} (total ${o.total})`;
+  }
+  
+  let trackingHtml = `
+    <div style="margin-top:0.5rem; background:rgba(0,176,255,0.06); border:1px solid rgba(0,176,255,0.2); padding:0.8rem; border-radius:var(--radius);">
+      🚚 <strong>Delivery Service:</strong> <input type="text" value="${o.shippingCarrier || ''}" class="order-carrier-edit" data-id="${o.id}" placeholder="e.g. DHL, FedEx, USPS" style="width:120px; padding:0.2rem 0.4rem; background:var(--color-input-bg); color:var(--color-text-bright); border:1px solid var(--color-border); border-radius:4px;" />
+      <strong style="margin-left:0.5rem;">Tracking Number:</strong> <input type="text" value="${o.trackingNumber || ''}" class="order-track-edit" data-id="${o.id}" placeholder="Enter tracking..." style="width:140px; padding:0.2rem 0.4rem; background:var(--color-input-bg); color:var(--color-text-bright); border:1px solid var(--color-border); border-radius:4px;" />
+    </div>
+  `;
+  
+  orderDetailsContent.innerHTML = `
+    <div>
+      <h4 style="margin:0 0 0.5rem; color:var(--color-muted); font-size:0.85rem; text-transform:uppercase;">Customer info</h4>
+      <div style="line-height:1.6; background:var(--color-input-bg); padding:1rem; border-radius:var(--radius); border:1px solid var(--color-border);">
+        <div><strong>Name:</strong> ${cl.name}</div>
+        <div><strong>Phone:</strong> ${cl.phone || '—'}</div>
+        <div><strong>Email:</strong> ${cl.email || '—'}</div>
+        <div><strong>Address:</strong> ${cl.address || '—'}</div>
+      </div>
+    </div>
+    <div>
+      <h4 style="margin:0 0 0.5rem; color:var(--color-muted); font-size:0.85rem; text-transform:uppercase;">Products</h4>
+      <div style="display:flex; flex-direction:column; gap:0.5rem;">
+        ${itemsHtml || '<div style="color:var(--color-muted);">No products (manual order)</div>'}
+      </div>
+    </div>
+    ${trackingHtml}
+    <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--color-border); padding-top:1rem; margin-top:0.5rem;">
+      <span style="font-weight:bold; font-size:1.1rem; color:var(--color-text-bright);">Total payable:</span>
+      <span style="font-weight:bold; font-size:1.4rem; color:var(--color-primary-start);">${localTotal}</span>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+      <button type="button" class="print-invoice-btn" data-id="${o.id}" style="padding:0.5rem 1rem; background:linear-gradient(135deg, #00b0ff, #0091ea); color:#fff; border:none; border-radius:var(--radius); cursor:pointer; font-weight:bold; font-size:0.85rem; display:flex; align-items:center; gap:0.4rem;">🖨️ Print Invoice</button>
+    </div>
+  `;
+  
+  // Event listeners for tracking updates
+  const trackInp = orderDetailsContent.querySelector(".order-track-edit");
+  const carrierInp = orderDetailsContent.querySelector(".order-carrier-edit");
+  
+  if(trackInp) {
+    trackInp.addEventListener("change", (e) => {
+      o.trackingNumber = e.target.value.trim();
+      localStorage.setItem("brakeOrders", JSON.stringify(orders));
+      showToast("Tracking Number saved!");
+    });
+  }
+  if(carrierInp) {
+    carrierInp.addEventListener("change", (e) => {
+      o.shippingCarrier = e.target.value.trim();
+      localStorage.setItem("brakeOrders", JSON.stringify(orders));
+      showToast("Delivery Service saved!");
+    });
+  }
+  
+  // Print Invoice handler
+  const printBtn = orderDetailsContent.querySelector(".print-invoice-btn");
+  if (printBtn) {
+    printBtn.addEventListener("click", () => {
+      const statusLabelsP = { paid: "Paid", processing: "Processing", shipped: "Shipped", delivered: "Delivered", cancelled: "Cancelled" };
+      const itemsTableRows = viewableItems.map(item => `
+        <tr>
+          <td style="padding:8px; border:1px solid #ddd;">${item.name}</td>
+          <td style="padding:8px; border:1px solid #ddd; text-align:center;">${item.qty}</td>
+          <td style="padding:8px; border:1px solid #ddd; text-align:right;">$${((item.price || 0)).toFixed(2)}</td>
+          <td style="padding:8px; border:1px solid #ddd; text-align:right;">$${((item.price || 0) * item.qty).toFixed(2)}</td>
+        </tr>
+      `).join("");
+      
+      const invoiceHtml = `
+        <html><head><title>Invoice #${o.id.toString().slice(-4)}</title>
+        <style>
+          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; max-width: 800px; margin: 0 auto; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #1a1f35; padding-bottom: 20px; }
+          .logo { font-size: 24px; font-weight: bold; color: #1a1f35; }
+          .invoice-title { font-size: 28px; color: #1a1f35; text-align: right; }
+          .invoice-num { font-size: 14px; color: #666; }
+          .section { margin-bottom: 20px; }
+          .section h3 { font-size: 14px; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+          table { width: 100%; border-collapse: collapse; }
+          th { background: #1a1f35; color:var(--color-text-bright); padding: 10px 8px; text-align: left; font-size: 13px; }
+          td { padding: 8px; border: 1px solid #ddd; font-size: 13px; }
+          .total-row { font-weight: bold; font-size: 16px; }
+          .status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; color:var(--color-text-bright); background: ${statusColorsMap[o.status] || '#666'}; }
+          .footer { margin-top: 40px; border-top: 1px solid #ddd; padding-top: 15px; font-size: 12px; color: #999; text-align: center; }
+          @media print { body { padding: 20px; } }
+        </style></head><body>
+        <div class="header">
+          <div>
+            <div class="logo">Brake Discs Store</div>
+            <div style="font-size:12px; color:#666; margin-top:4px;">Premium motorcycle brake discs</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="invoice-title">INVOICE</div>
+            <div class="invoice-num">#${o.id.toString().slice(-4)} | ${new Date(o.date).toLocaleDateString()}</div>
+            <div style="margin-top:8px;"><span class="status-badge">${statusLabelsP[o.status] || o.status}</span></div>
+          </div>
+        </div>
+        
+        <div class="section">
+          <h3>Bill To</h3>
+          <div><strong>${cl.name}</strong></div>
+          <div>${cl.email || ''}</div>
+          <div>${cl.phone || ''}</div>
+          <div>${cl.address || ''}</div>
+        </div>
+        
+        <div class="section">
+          <h3>Order Items</h3>
+          <table>
+            <thead><tr><th>Product</th><th style="text-align:center;">Qty</th><th style="text-align:right;">Unit Price</th><th style="text-align:right;">Total</th></tr></thead>
+            <tbody>${itemsTableRows}</tbody>
+          </table>
+        </div>
+        
+        <div style="text-align:right; margin-top:20px;">
+          <div class="total-row">Total: ${localTotal}</div>
+        </div>
+        
+        ${o.trackingNumber ? '<div class="section" style="margin-top:20px;"><h3>Shipping</h3><div>Carrier: ' + (o.shippingCarrier || 'N/A') + ' | Tracking: ' + o.trackingNumber + '</div></div>' : ''}
+        
+        <div class="footer">
+          Thank you for your purchase! | Brake Discs Store | Generated ${new Date().toLocaleDateString()}
+        </div>
+        </body></html>
+      `;
+      
+      const printWin = window.open("", "_blank", "width=800,height=600");
+      printWin.document.write(invoiceHtml);
+      printWin.document.close();
+      setTimeout(() => { printWin.print(); }, 300);
+    });
+  }
+  
+  orderDetailsModal.style.display = 'flex';
+}
+window.openOrderDetails = openOrderDetails;
 
 function renderOrders() {
   const orders = JSON.parse(localStorage.getItem("brakeOrders") || "[]");
@@ -1016,23 +1392,23 @@ function renderOrders() {
   const customThs = customCols.map(c => `
     <th>
       ${c.name} 
-      <button class="del-col-btn" data-col="${c.id}" style="background:none; border:none; color:#ff5252; cursor:pointer; font-size:0.85rem; padding:0; margin-left:0.2rem;" title="Удалить столбец">🗑️</button>
+      <button class="del-col-btn" data-col="${c.id}" style="background:none; border:none; color:#ff5252; cursor:pointer; font-size:0.85rem; padding:0; margin-left:0.2rem;" title="Delete column">🗑️</button>
     </th>
   `).join("");
   
   ordersTableHeader.innerHTML = `
     <th>№</th>
-    <th>Дата</th>
-    <th>Товар</th>
-    ${isSuper ? '<th>Производитель</th>' : ''}
-    <th>Клиент</th>
-    <th>Адрес</th>
-    <th>Связь</th>
-    <th>Комментарий</th>
-    <th>Сумма</th>
-    <th>Статус</th>
+    <th>Date</th>
+    <th>Product</th>
+    ${isSuper ? '<th>Manufacturer</th>' : ''}
+    <th>Customer</th>
+    <th>Address</th>
+    <th>Contact</th>
+    <th>Comment</th>
+    <th>Total</th>
+    <th>Status</th>
     ${customThs}
-    <th>Действие</th>
+    <th>Action</th>
   `;
 
   // Attach delete column listeners
@@ -1043,7 +1419,7 @@ function renderOrders() {
       customCols = customCols.filter(c => c.id !== colId);
       localStorage.setItem("brakeOrderCols", JSON.stringify(customCols));
       renderOrders();
-      showToast("Столбец удален!");
+      showToast("Column deleted!");
     });
   });
 
@@ -1057,14 +1433,16 @@ function renderOrders() {
   });
 
   if (filteredOrders.length === 0) {
-    ordersTableBody.innerHTML = `<tr><td colspan="${11 + (isSuper ? 1 : 0) + customCols.length}" style="text-align:center;">Нет заказов</td></tr>`;
+    ordersTableBody.innerHTML = `<tr><td colspan="${11 + (isSuper ? 1 : 0) + customCols.length}" style="text-align:center;">No orders</td></tr>`;
     return;
   }
   
   const statusColors = {
     "paid": "#ffb300",
     "processing": "#1e88e5",
-    "shipped": "#43a047"
+    "shipped": "#43a047",
+    "delivered": "#00e676",
+    "cancelled": "#ff5252"
   };
   
   filteredOrders.forEach(o => {
@@ -1082,7 +1460,7 @@ function renderOrders() {
     let displayTotal = o.total;
     if (activeMfg !== "all") {
       const subtotal = mfgItems.reduce((sum, it) => sum + ((it.price || 0) * it.qty), 0);
-      displayTotal = `$${subtotal.toFixed(2)} (всего ${o.total})`;
+      displayTotal = `$${subtotal.toFixed(2)} (total ${o.total})`;
     }
     
     const client = clients.find(c => c.id === o.customerId) || o.customer || {};
@@ -1100,7 +1478,7 @@ function renderOrders() {
 
     const customTds = customCols.map(c => {
       const val = (o.customData && o.customData[c.id]) ? o.customData[c.id] : "";
-      return `<td><input type="text" class="custom-col-input" data-order="${o.id}" data-col="${c.id}" value="${val}" style="width:100px; padding:0.4rem; background:transparent; border:1px dashed #444; color:#fff; border-radius:4px;" placeholder="Ввод..."/></td>`;
+      return `<td><input type="text" class="custom-col-input" data-order="${o.id}" data-col="${c.id}" value="${val}" style="width:100px; padding:0.4rem; background:transparent; border:1px dashed #444; color:var(--color-text-bright); border-radius:4px;" placeholder="Enter..."/></td>`;
     }).join("");
     
     tr.innerHTML = `
@@ -1117,14 +1495,20 @@ function renderOrders() {
       <td style="font-weight:bold;">${displayTotal}</td>
       <td>
         <select class="status-select" data-id="${o.id}" style="padding:0.4rem; background:var(--color-bg); color:${statusColors[o.status] || '#fff'}; border:1px solid var(--color-muted); border-radius:4px;">
-          <option value="paid" ${o.status === "paid" ? "selected" : ""}>Оплачен</option>
-          <option value="processing" ${o.status === "processing" ? "selected" : ""}>В процессе</option>
-          <option value="shipped" ${o.status === "shipped" ? "selected" : ""}>Отправлен</option>
+          <option value="paid" ${o.status === "paid" ? "selected" : ""}>Paid</option>
+          <option value="processing" ${o.status === "processing" ? "selected" : ""}>Processing</option>
+          <option value="shipped" ${o.status === "shipped" ? "selected" : ""}>Shipped</option>
+          <option value="delivered" ${o.status === "delivered" ? "selected" : ""}>Delivered</option>
+          <option value="cancelled" ${o.status === "cancelled" ? "selected" : ""}>Cancelled</option>
         </select>
       </td>
       ${customTds}
       <td>
-        <button class="edit-btn view-order-btn" data-id="${o.id}" title="Детали">👁️</button>
+        <div style="display:flex; gap:0.3rem; align-items:center;">
+          <button class="edit-btn view-order-btn" data-id="${o.id}" title="Details">👁️</button>
+          <button class="edit-btn estimate-order-btn" data-id="${o.id}" title="Accounting Estimate" style="color:#00e676;">📊</button>
+          <button class="edit-btn delete-order-btn" data-id="${o.id}" title="Delete order" style="color:#ff5252;">🗑️</button>
+        </div>
       </td>
     `;
     ordersTableBody.appendChild(tr);
@@ -1137,6 +1521,7 @@ function renderOrders() {
       const newStatus = e.target.value;
       const idx = orders.findIndex(x => x.id == orderId);
       if (idx !== -1) {
+        const prevStatus = orders[idx].status;
         orders[idx].status = newStatus;
         
         // Automatically generate default tracking and shippingCarrier when shipped
@@ -1146,9 +1531,69 @@ function renderOrders() {
         }
         
         localStorage.setItem("brakeOrders", JSON.stringify(orders));
+        
+        // Automatically sync order status to manufacturer bookkeeping
+        const updatedOrder = orders[idx];
+        const mfgsSet = new Set(updatedOrder.items.map(item => {
+          const p = products.find(prod => prod.id == item.id);
+          return p ? (p.manufacturer || "Garage1") : "Garage1";
+        }));
+        
+        mfgsSet.forEach(mfg => {
+          if (newStatus === "cancelled") {
+            unpostOrderFromAccounting(orderId, mfg);
+          } else {
+            postOrderToAccounting(updatedOrder, mfg);
+          }
+        });
+        
+        // Send status change notification to user via support chat
+        const statusLabels = { paid: "Paid", processing: "Processing", shipped: "Shipped", delivered: "Delivered", cancelled: "Cancelled" };
+        const orderUsername = orders[idx].username || "guest";
+        if (orderUsername && orderUsername !== "guest" && orderUsername !== "admin_manual") {
+          const messages = JSON.parse(localStorage.getItem("brakeMessages") || "[]");
+          let statusMsg = `📋 Order #${orderId.toString().slice(-4)} status updated: ${statusLabels[prevStatus] || prevStatus} → ${statusLabels[newStatus] || newStatus}.`;
+          if (newStatus === "shipped") {
+            statusMsg += ` 🚚 Tracking: ${orders[idx].trackingNumber || 'N/A'} via ${orders[idx].shippingCarrier || 'Post'}.`;
+          }
+          if (newStatus === "delivered") {
+            statusMsg += ` ✅ Your order has been delivered. Thank you for your purchase!`;
+          }
+          if (newStatus === "cancelled") {
+            statusMsg += ` ❌ Please contact support if you have questions about this cancellation.`;
+          }
+          messages.push({
+            id: Date.now(),
+            username: orderUsername,
+            sender: "admin",
+            text: statusMsg,
+            date: new Date().toISOString(),
+            readByAdmin: true,
+            manufacturer: manufacturerName || "Administration (Superuser)"
+          });
+          localStorage.setItem("brakeMessages", JSON.stringify(messages));
+        }
+        
         renderOrders();
-        showToast("Статус заказа изменен!");
+        showToast("Order status changed!");
       }
+    });
+  });
+  
+  // Delete order
+  document.querySelectorAll(".delete-order-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const orderId = btn.dataset.id;
+      customConfirm(`Are you sure you want to delete order #${orderId.toString().slice(-4)}?`, (yes) => {
+        if (!yes) return;
+        const idx = orders.findIndex(x => x.id == orderId);
+        if (idx !== -1) {
+          orders.splice(idx, 1);
+          localStorage.setItem("brakeOrders", JSON.stringify(orders));
+          renderOrders();
+          showToast("Order deleted!");
+        }
+      });
     });
   });
   
@@ -1171,94 +1616,16 @@ function renderOrders() {
   // Detailed Popups
   document.querySelectorAll(".view-order-btn").forEach(btn => {
     btn.addEventListener("click", () => {
+      openOrderDetails(btn.dataset.id);
+    });
+  });
+
+  // Estimate popups
+  document.querySelectorAll(".estimate-order-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       const orderId = btn.dataset.id;
-      const o = orders.find(x => x.id == orderId);
-      if(o) {
-        const cl = clients.find(c => c.id === o.customerId) || o.customer || {};
-        const statusLabels = { paid: "Оплачен", processing: "В процессе", shipped: "Отправлен" };
-        const statusColor = statusColors[o.status] || '#555';
-        
-        orderModalId.textContent = `Заказ #${o.id}`;
-        orderModalStatus.textContent = statusLabels[o.status] || o.status;
-        orderModalStatus.style.background = statusColor;
-        
-        const viewableItems = o.items.filter(item => {
-          if (activeMfg === "all") return true;
-          const p = products.find(prod => prod.id == item.id);
-          const pMfg = p ? (p.manufacturer || "Garage1") : "Garage1";
-          return pMfg === activeMfg;
-        });
-        
-        let itemsHtml = viewableItems.map(item => `
-          <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:0.8rem; border-radius:8px; border:1px solid #333;">
-            <div>
-              <div style="font-weight:bold; color:#fff;">${item.name}</div>
-              <div style="font-size:0.8rem; color:#aaa;">Количество: ${item.qty}</div>
-            </div>
-            <div style="font-weight:bold; color:var(--color-primary-start);">$${((item.price || 0) * item.qty).toFixed(2)}</div>
-          </div>
-        `).join("");
-        
-        let localTotal = o.total;
-        if (activeMfg !== "all") {
-          const mfgTotal = viewableItems.reduce((sum, it) => sum + ((it.price || 0) * it.qty), 0);
-          localTotal = `$${mfgTotal.toFixed(2)} (всего ${o.total})`;
-        }
-        
-        let trackingHtml = "";
-        if (o.status === "shipped") {
-          trackingHtml = `
-            <div style="margin-top:0.5rem; background:rgba(0,230,118,0.1); border:1px solid #00e676; padding:0.8rem; border-radius:8px;">
-              🚚 <strong>Служба доставки:</strong> <input type="text" value="${o.shippingCarrier || 'CDEK'}" class="order-carrier-edit" data-id="${o.id}" style="width:100px; padding:0.2rem; background:#111; color:#fff; border:1px solid #444;" />
-              <strong>Трек-номер:</strong> <input type="text" value="${o.trackingNumber || ''}" class="order-track-edit" data-id="${o.id}" style="width:120px; padding:0.2rem; background:#111; color:#fff; border:1px solid #444;" />
-            </div>
-          `;
-        }
-        
-        orderDetailsContent.innerHTML = `
-          <div>
-            <h4 style="margin:0 0 0.5rem; color:#aaa; font-size:0.85rem; text-transform:uppercase;">Информация о клиенте</h4>
-            <div style="line-height:1.6; background:rgba(0,0,0,0.2); padding:1rem; border-radius:8px; border:1px solid #333;">
-              <div><strong>Имя:</strong> ${cl.name}</div>
-              <div><strong>Телефон:</strong> ${cl.phone || '—'}</div>
-              <div><strong>Email:</strong> ${cl.email || '—'}</div>
-              <div><strong>Адрес:</strong> ${cl.address || '—'}</div>
-            </div>
-          </div>
-          <div>
-            <h4 style="margin:0 0 0.5rem; color:#aaa; font-size:0.85rem; text-transform:uppercase;">Товары</h4>
-            <div style="display:flex; flex-direction:column; gap:0.5rem;">
-              ${itemsHtml || '<div style="color:#aaa;">Нет товаров (ручной заказ)</div>'}
-            </div>
-          </div>
-          ${trackingHtml}
-          <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #444; padding-top:1rem; margin-top:0.5rem;">
-            <span style="font-weight:bold; font-size:1.1rem; color:#fff;">Итого к оплате:</span>
-            <span style="font-weight:bold; font-size:1.4rem; color:var(--color-primary-start);">${localTotal}</span>
-          </div>
-        `;
-        
-        // Event listeners for tracking updates
-        const trackInp = orderDetailsContent.querySelector(".order-track-edit");
-        const carrierInp = orderDetailsContent.querySelector(".order-carrier-edit");
-        
-        if(trackInp) {
-          trackInp.addEventListener("change", (e) => {
-            o.trackingNumber = e.target.value.trim();
-            localStorage.setItem("brakeOrders", JSON.stringify(orders));
-            showToast("Трек-номер сохранен!");
-          });
-        }
-        if(carrierInp) {
-          carrierInp.addEventListener("change", (e) => {
-            o.shippingCarrier = e.target.value.trim();
-            localStorage.setItem("brakeOrders", JSON.stringify(orders));
-            showToast("Служба доставки сохранена!");
-          });
-        }
-        
-        orderDetailsModal.style.display = 'flex';
-      }
+      openOrderEstimateModal(orderId);
     });
   });
   
@@ -1276,22 +1643,22 @@ function renderOrders() {
       clientModalId.textContent = `ID: ${cid}`;
       
       clientDetails.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:0.8rem; background:rgba(0,0,0,0.15); padding:1.2rem; border-radius:12px; border:1px solid #333;">
+        <div style="display:flex; flex-direction:column; gap:0.8rem; background:var(--color-input-bg); padding:1.2rem; border-radius:12px; border:1px solid var(--color-border);">
           <div>
-            <span style="color:#aaa; font-size:0.8rem;">Телефон:</span>
-            <div style="font-weight:600; font-size:0.95rem; color:#fff; margin-top:0.1rem;">${cl.phone || '—'}</div>
+            <span style="color:var(--color-muted); font-size:0.8rem;">Phone:</span>
+            <div style="font-weight:600; font-size:0.95rem; color:var(--color-text-bright); margin-top:0.1rem;">${cl.phone || '—'}</div>
           </div>
           <div>
-            <span style="color:#aaa; font-size:0.8rem;">Email:</span>
-            <div style="font-weight:600; font-size:0.95rem; color:#fff; margin-top:0.1rem;">${cl.email || '—'}</div>
+            <span style="color:var(--color-muted); font-size:0.8rem;">Email:</span>
+            <div style="font-weight:600; font-size:0.95rem; color:var(--color-text-bright); margin-top:0.1rem;">${cl.email || '—'}</div>
           </div>
           <div>
-            <span style="color:#aaa; font-size:0.8rem;">Адрес доставки:</span>
-            <div style="font-weight:600; font-size:0.95rem; color:#fff; margin-top:0.1rem; line-height:1.4;">${cl.address || '—'}</div>
+            <span style="color:var(--color-muted); font-size:0.8rem;">Shipping Address:</span>
+            <div style="font-weight:600; font-size:0.95rem; color:var(--color-text-bright); margin-top:0.1rem; line-height:1.4;">${cl.address || '—'}</div>
           </div>
           ${cl.preferredContact ? `
           <div>
-            <span style="color:#aaa; font-size:0.8rem;">Способ связи:</span>
+            <span style="color:var(--color-muted); font-size:0.8rem;">Contact method:</span>
             <div style="font-weight:600; font-size:0.95rem; color:var(--color-primary-start); margin-top:0.1rem;">
               ${cl.preferredContact} ${cl.contactValue ? ': ' + cl.contactValue : ''}
             </div>
@@ -1316,18 +1683,18 @@ if (addManualOrderBtn) {
     const prodOptions = products.map(p => `<option value="${p.id}">${p.name} ($${p.price})</option>`).join('');
     
     let html = `
-      <div><label style="font-size:0.85rem;color:#aaa;">Имя клиента</label><input type="text" id="manualName" required style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; margin-top:0.3rem;" /></div>
-      <div><label style="font-size:0.85rem;color:#aaa;">Телефон</label><input type="text" id="manualPhone" style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; margin-top:0.3rem;" /></div>
-      <div><label style="font-size:0.85rem;color:#aaa;">Email</label><input type="email" id="manualEmail" style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; margin-top:0.3rem;" /></div>
-      <div><label style="font-size:0.85rem;color:#aaa;">Адрес доставки</label><input type="text" id="manualAddress" style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; margin-top:0.3rem;" /></div>
-      <div><label style="font-size:0.85rem;color:#aaa;">Сумма заказа ($)</label><input type="number" step="0.01" id="manualTotal" required style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; margin-top:0.3rem;" /></div>
+      <div><label style="font-size:0.85rem;color:var(--color-muted);">Customer name</label><input type="text" id="manualName" required style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright); margin-top:0.3rem;" /></div>
+      <div><label style="font-size:0.85rem;color:var(--color-muted);">Phone</label><input type="text" id="manualPhone" style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright); margin-top:0.3rem;" /></div>
+      <div><label style="font-size:0.85rem;color:var(--color-muted);">Email</label><input type="email" id="manualEmail" style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright); margin-top:0.3rem;" /></div>
+      <div><label style="font-size:0.85rem;color:var(--color-muted);">Shipping Address</label><input type="text" id="manualAddress" style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright); margin-top:0.3rem;" /></div>
+      <div><label style="font-size:0.85rem;color:var(--color-muted);">Order Total ($)</label><input type="number" step="0.01" id="manualTotal" required style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright); margin-top:0.3rem;" /></div>
     `;
     
     const productSelect = document.getElementById("manualProductSelect");
     if(productSelect) productSelect.innerHTML = prodOptions;
     
     customCols.forEach(c => {
-      html += `<div><label style="font-size:0.85rem;color:#aaa;">${c.name}</label><input type="text" class="manual-custom-field" data-id="${c.id}" style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid #444; background:var(--color-bg); color:#fff; margin-top:0.3rem;" /></div>`;
+      html += `<div><label style="font-size:0.85rem;color:var(--color-muted);">${c.name}</label><input type="text" class="manual-custom-field" data-id="${c.id}" style="width:100%; padding:0.8rem; border-radius:4px; border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright); margin-top:0.3rem;" /></div>`;
     });
     
     dynamicOrderFields.innerHTML = html;
@@ -1384,7 +1751,7 @@ if (addOrderForm) {
     localStorage.setItem("brakeOrders", JSON.stringify(orders));
     renderOrders();
     addOrderModal.style.display = "none";
-    showToast("Ручной заказ успешно добавлен!");
+    showToast("Manual order added successfully!");
   });
 }
 
@@ -1415,1836 +1782,7 @@ if (addColForm) {
     localStorage.setItem("brakeOrderCols", JSON.stringify(customCols));
     renderOrders();
     addColModal.style.display = "none";
-    showToast("Столбец добавлен!");
-  });
-}
-
-// --- Interactive Excel SpreadSheet System ---
-const excelSpreadsheet = document.getElementById("excelSpreadsheet");
-const syncExcelBtn = document.getElementById("syncExcelBtn");
-
-// Custom sheets registry loader
-const customSheetsList = JSON.parse(localStorage.getItem("brakeExcelCustomSheets") || "[]");
-const dsSelectEl = document.getElementById("excelDataSource");
-if (dsSelectEl) {
-  customSheetsList.forEach(sheet => {
-    if (!dsSelectEl.querySelector(`option[value="${sheet.id}"]`)) {
-      const opt = document.createElement("option");
-      opt.value = sheet.id;
-      opt.textContent = sheet.name;
-      dsSelectEl.appendChild(opt);
-    }
-  });
-}
-
-// Range Selection State Variables
-let isExcelSelecting = false;
-let excelSelectStart = null; // { colIdx, rowIdx }
-let excelSelectEnd = null;   // { colIdx, rowIdx }
-let excelSelectedRange = null; // { rStart, rEnd, cStart, cEnd }
-let excelMoveSourceRange = null; // Source of moved range
-let isExcelMoveMode = false;
-
-// Undo / Redo history state stacks
-let excelUndoStack = [];
-let excelRedoStack = [];
-
-// Autofill drag state variables
-let isExcelAutofilling = false;
-let excelAutofillSourceCellId = null;
-let excelAutofillTargetCells = [];
-
-function pushExcelState() {
-  const dsSelect = document.getElementById("excelDataSource");
-  const dataSource = dsSelect ? dsSelect.value : "orders";
-  const stylesKey = `brakeExcelStyles_${dataSource}`;
-  const cellStyles = JSON.parse(localStorage.getItem(stylesKey) || "{}");
-  
-  excelUndoStack.push({
-    data: Object.assign({}, excelData),
-    styles: Object.assign({}, cellStyles)
-  });
-  
-  excelRedoStack = []; // clear redo stack on new action
-  if (excelUndoStack.length > 50) {
-    excelUndoStack.shift();
-  }
-}
-
-function excelUndo() {
-  if (excelUndoStack.length === 0) return;
-  
-  const dsSelect = document.getElementById("excelDataSource");
-  const dataSource = dsSelect ? dsSelect.value : "orders";
-  const stylesKey = `brakeExcelStyles_${dataSource}`;
-  const cellStyles = JSON.parse(localStorage.getItem(stylesKey) || "{}");
-  
-  excelRedoStack.push({
-    data: Object.assign({}, excelData),
-    styles: Object.assign({}, cellStyles)
-  });
-  
-  const prevState = excelUndoStack.pop();
-  
-  // Restore
-  excelData = Object.assign({}, prevState.data);
-  localStorage.setItem(stylesKey, JSON.stringify(prevState.styles));
-  
-  renderExcelGrid();
-  showToast(currentLang === 'ru' ? "Действие отменено" : "Action undone");
-}
-
-function excelRedo() {
-  if (excelRedoStack.length === 0) return;
-  
-  const dsSelect = document.getElementById("excelDataSource");
-  const dataSource = dsSelect ? dsSelect.value : "orders";
-  const stylesKey = `brakeExcelStyles_${dataSource}`;
-  const cellStyles = JSON.parse(localStorage.getItem(stylesKey) || "{}");
-  
-  excelUndoStack.push({
-    data: Object.assign({}, excelData),
-    styles: Object.assign({}, cellStyles)
-  });
-  
-  const nextState = excelRedoStack.pop();
-  
-  // Restore
-  excelData = Object.assign({}, nextState.data);
-  localStorage.setItem(stylesKey, JSON.stringify(nextState.styles));
-  
-  renderExcelGrid();
-  showToast(currentLang === 'ru' ? "Действие повторено" : "Action redone");
-}
-
-function adjustFormula(formula, rowDiff) {
-  if (rowDiff === 0) return formula;
-  return formula.replace(/([A-Z]+)(\d+)/g, (match, col, row) => {
-    const newRow = parseInt(row) + rowDiff;
-    return `${col}${newRow}`;
-  });
-}
-
-function getActiveCols() {
-  const dsSelect = document.getElementById("excelDataSource");
-  const dataSource = dsSelect ? dsSelect.value : "orders";
-  let colsKey = `brakeExcelCols_${dataSource}`;
-  return JSON.parse(localStorage.getItem(colsKey) || "[]");
-}
-
-function updateVisualSelection(activeCols) {
-  const rStart = Math.min(excelSelectStart.rowIdx, excelSelectEnd.rowIdx);
-  const rEnd = Math.max(excelSelectStart.rowIdx, excelSelectEnd.rowIdx);
-  const cStart = Math.min(excelSelectStart.colIdx, excelSelectEnd.colIdx);
-  const cEnd = Math.max(excelSelectStart.colIdx, excelSelectEnd.colIdx);
-  
-  let minTop = Infinity, minLeft = Infinity;
-  let maxBottom = -Infinity, maxRight = -Infinity;
-  let selectedCount = 0;
-
-  excelSpreadsheet.querySelectorAll(".excel-cell-edit").forEach(cell => {
-    const cid = cell.dataset.cell;
-    const match = cid.match(/^([A-Z]+)(\d+)$/);
-    if (match) {
-      const colLetter = match[1];
-      const rowNum = parseInt(match[2]);
-      const colIdx = activeCols.indexOf(colLetter);
-      
-      if (rowNum >= rStart && rowNum <= rEnd && colIdx >= cStart && colIdx <= cEnd) {
-        cell.classList.add("excel-cell-selected");
-        selectedCount++;
-        
-        const top = cell.offsetTop;
-        const left = cell.offsetLeft;
-        const bottom = top + cell.offsetHeight;
-        const right = left + cell.offsetWidth;
-        
-        if (top < minTop) minTop = top;
-        if (left < minLeft) minLeft = left;
-        if (bottom > maxBottom) maxBottom = bottom;
-        if (right > maxRight) maxRight = right;
-      } else {
-        cell.classList.remove("excel-cell-selected");
-      }
-    }
-  });
-
-  const overlay = document.getElementById("excelSelectionOverlay");
-  if (overlay && selectedCount > 0) {
-    overlay.style.display = "block";
-    overlay.style.top = `${minTop}px`;
-    overlay.style.left = `${minLeft}px`;
-    overlay.style.width = `${maxRight - minLeft}px`;
-    overlay.style.height = `${maxBottom - minTop}px`;
-    
-    // Set autofill source to bottom-right cell
-    const brCol = activeCols[cEnd];
-    excelAutofillSourceCellId = `${brCol}${rEnd}`;
-  } else if (overlay) {
-    overlay.style.display = "none";
-  }
-}
-
-function showSelectionPopup() {
-  const popup = document.getElementById("excelSelectionPopup");
-  if (!popup) return;
-  
-  const selectedCells = excelSpreadsheet.querySelectorAll(".excel-cell-selected");
-  if (selectedCells.length === 0) {
-    popup.style.display = "none";
-    return;
-  }
-  
-  let topMost = Infinity;
-  let rightMost = -Infinity;
-  let targetCell = null;
-  
-  selectedCells.forEach(cell => {
-    const rect = cell.getBoundingClientRect();
-    if (rect.top < topMost) {
-      topMost = rect.top;
-    }
-    if (rect.right > rightMost) {
-      rightMost = rect.right;
-      targetCell = cell;
-    }
-  });
-  
-  if (targetCell) {
-    const rect = targetCell.getBoundingClientRect();
-    const containerRect = excelSpreadsheet.offsetParent.getBoundingClientRect();
-    
-    popup.style.left = `${rect.right - containerRect.left - rect.width}px`;
-    popup.style.top = `${rect.top - containerRect.top - 40}px`;
-    popup.style.display = "flex";
-  }
-}
-
-function hideSelectionPopup() {
-  const popup = document.getElementById("excelSelectionPopup");
-  if (popup) popup.style.display = "none";
-}
-
-function clearExcelSelection() {
-  excelSelectedRange = null;
-  excelMoveSourceRange = null;
-  isExcelMoveMode = false;
-  excelSpreadsheet.style.cursor = "default";
-  excelSpreadsheet.querySelectorAll(".excel-cell-edit").forEach(cell => {
-    cell.style.cursor = "text";
-    cell.classList.remove("excel-cell-selected");
-  });
-  const overlay = document.getElementById("excelSelectionOverlay");
-  if (overlay) overlay.style.display = "none";
-}
-
-function pasteMovedRange(destCellId) {
-  if (!excelMoveSourceRange) return;
-  pushExcelState(); // Save state for Undo
-  
-  const activeCols = getActiveCols();
-  const match = destCellId.match(/^([A-Z]+)(\d+)$/);
-  if (!match) return;
-  
-  const destColLetter = match[1];
-  const destRow = parseInt(match[2]);
-  const destColIdx = activeCols.indexOf(destColLetter);
-  
-  const src = excelMoveSourceRange;
-  const rowOffset = destRow - src.rStart;
-  const colOffset = destColIdx - src.cStart;
-  
-  const dsSelect = document.getElementById("excelDataSource");
-  const dataSource = dsSelect ? dsSelect.value : "orders";
-  const stylesKey = `brakeExcelStyles_${dataSource}`;
-  const cellStyles = JSON.parse(localStorage.getItem(stylesKey) || "{}");
-  
-  const tempCells = [];
-  
-  for (let r = src.rStart; r <= src.rEnd; r++) {
-    for (let c = src.cStart; c <= src.cEnd; c++) {
-      const colLetter = activeCols[c];
-      const cellId = `${colLetter}${r}`;
-      
-      const val = excelData[cellId] || "";
-      const style = cellStyles[cellId] || null;
-      
-      tempCells.push({
-        relRow: r - src.rStart,
-        relCol: c - src.cStart,
-        val: val,
-        style: style,
-        sourceCellId: cellId
-      });
-      
-      excelData[cellId] = "";
-      delete cellStyles[cellId];
-    }
-  }
-  
-  tempCells.forEach(cell => {
-    const targetRow = destRow + cell.relRow;
-    const targetColIdx = destColIdx + cell.relCol;
-    
-    if (targetColIdx < activeCols.length && targetRow <= 100) {
-      const targetColLetter = activeCols[targetColIdx];
-      const targetCellId = `${targetColLetter}${targetRow}`;
-      
-      excelData[targetCellId] = cell.val;
-      if (cell.style) {
-        cellStyles[targetCellId] = cell.style;
-      }
-    }
-  });
-  
-  localStorage.setItem(stylesKey, JSON.stringify(cellStyles));
-  clearExcelSelection();
-  renderExcelGrid();
-  showToast(currentLang === 'ru' ? "Область успешно перемещена!" : "Cell range successfully moved!");
-}
-
-function renderExcelSheetTabs() {
-  const container = document.getElementById("excelSheetsTabsContainer");
-  if (!container) return;
-  
-  const dsSelect = document.getElementById("excelDataSource");
-  const currentDataSource = dsSelect ? dsSelect.value : "orders";
-  
-  const addBtn = document.getElementById("excelAddSheetBtn");
-  container.querySelectorAll(".excel-sheet-tab").forEach(tab => tab.remove());
-  
-  const stdSheets = [
-    { id: "orders", label: "📋 Лист 1: Заказы" },
-    { id: "products", label: "📦 Лист 2: Склад товаров" }
-  ];
-  
-  const customSheets = JSON.parse(localStorage.getItem("brakeExcelCustomSheets") || "[]");
-  const allSheets = [...stdSheets, ...customSheets];
-  
-  allSheets.forEach(sheet => {
-    const isActive = currentDataSource === sheet.id;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `excel-sheet-tab ${isActive ? 'active' : ''}`;
-    btn.dataset.source = sheet.id;
-    
-    btn.style.padding = "0.6rem 1.2rem";
-    btn.style.fontWeight = "bold";
-    btn.style.fontSize = "0.85rem";
-    btn.style.background = isActive ? "#1a1e2e" : "#0f111a";
-    btn.style.color = isActive ? "var(--color-primary-start)" : "#888";
-    btn.style.border = "none";
-    btn.style.borderRight = "1px solid #2b3040";
-    btn.style.borderTop = `3px solid ${isActive ? 'var(--color-primary-start)' : 'transparent'}`;
-    btn.style.cursor = "pointer";
-    btn.style.display = "flex";
-    btn.style.alignItems = "center";
-    btn.style.gap = "0.4rem";
-    btn.style.transition = "var(--transition)";
-    btn.style.outline = "none";
-    
-    btn.textContent = sheet.label || sheet.name;
-    
-    btn.addEventListener("click", () => {
-      container.querySelectorAll(".excel-sheet-tab").forEach(t => {
-        t.classList.remove("active");
-        t.style.background = "#0f111a";
-        t.style.color = "#888";
-        t.style.borderTopColor = "transparent";
-      });
-      btn.classList.add("active");
-      btn.style.background = "#1a1e2e";
-      btn.style.color = "var(--color-primary-start)";
-      btn.style.borderTopColor = "var(--color-primary-start)";
-      
-      if (dsSelect) {
-        dsSelect.value = sheet.id;
-        excelSortState.column = null;
-        renderExcelGrid();
-      }
-    });
-    
-    btn.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      // Only allow modifying custom sheets, or maybe all? The prompt says "любой пользовательский лист" (any custom sheet).
-      if (sheet.id.startsWith("custom_")) {
-        showExcelContextMenu(e.clientX, e.clientY, "sheet", sheet.id, { btn, sheetName: sheet.name });
-      }
-    });
-    
-    btn.addEventListener("dblclick", (e) => {
-      if (sheet.id.startsWith("custom_")) {
-        const newName = prompt(currentLang === 'ru' ? "Новое имя листа:" : "New sheet name:", sheet.name);
-        if (newName && newName.trim()) {
-          const customSheets = JSON.parse(localStorage.getItem("brakeExcelCustomSheets") || "[]");
-          const idx = customSheets.findIndex(s => s.id === sheet.id);
-          if (idx !== -1) {
-            customSheets[idx].name = newName.trim();
-            localStorage.setItem("brakeExcelCustomSheets", JSON.stringify(customSheets));
-            renderExcelSheetTabs();
-            // Update dsSelect option text if needed
-            const dsSelect = document.getElementById("excelDataSource");
-            if (dsSelect) {
-              const opt = Array.from(dsSelect.options).find(o => o.value === sheet.id);
-              if (opt) opt.textContent = newName.trim();
-            }
-          }
-        }
-      }
-    });
-    
-    if (addBtn) {
-      container.insertBefore(btn, addBtn);
-    } else {
-      container.appendChild(btn);
-    }
-  });
-}
-
-// --- Excel Context Menu Handling ---
-let activeContextMenuTarget = null;
-let activeContextMenuType = null;
-let activeContextMenuExtra = null;
-
-function showExcelContextMenu(x, y, type, targetId, extraData) {
-  const menu = document.getElementById("excelContextMenu");
-  if (!menu) return;
-  
-  activeContextMenuTarget = targetId;
-  activeContextMenuType = type;
-  activeContextMenuExtra = extraData;
-  
-  // Hide all items first
-  menu.querySelectorAll(".context-menu-item").forEach(item => item.style.display = "none");
-  
-  if (type === "sheet") {
-    document.getElementById("ctxRenameSheet").style.display = "block";
-    document.getElementById("ctxDeleteSheet").style.display = "block";
-  } else if (type === "col") {
-    document.getElementById("ctxRenameCol").style.display = "block";
-    document.getElementById("ctxInsertColLeft").style.display = "block";
-    document.getElementById("ctxInsertColRight").style.display = "block";
-    document.getElementById("ctxDeleteCol").style.display = "block";
-  } else if (type === "row") {
-    document.getElementById("ctxInsertRowAbove").style.display = "block";
-    document.getElementById("ctxInsertRowBelow").style.display = "block";
-    document.getElementById("ctxDeleteRow").style.display = "block";
-  }
-  
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
-  menu.style.display = "block";
-}
-
-function hideExcelContextMenu() {
-  const menu = document.getElementById("excelContextMenu");
-  if (menu) menu.style.display = "none";
-}
-
-document.addEventListener("click", (e) => {
-  if (!e.target.closest("#excelContextMenu")) {
-    hideExcelContextMenu();
-  }
-});
-
-document.addEventListener("DOMContentLoaded", () => {
-  const menu = document.getElementById("excelContextMenu");
-  if (!menu) return;
-  
-  document.getElementById("ctxRenameSheet").addEventListener("click", () => {
-    if (activeContextMenuType === "sheet" && activeContextMenuTarget) {
-      customPrompt(currentLang === 'ru' ? "Новое имя листа:" : "New sheet name:", activeContextMenuExtra.sheetName, (newName) => {
-        if (newName && newName.trim()) {
-          const customSheets = JSON.parse(localStorage.getItem("brakeExcelCustomSheets") || "[]");
-          const idx = customSheets.findIndex(s => s.id === activeContextMenuTarget);
-          if (idx !== -1) {
-            customSheets[idx].name = newName.trim();
-            localStorage.setItem("brakeExcelCustomSheets", JSON.stringify(customSheets));
-            renderExcelSheetTabs();
-            const dsSelect = document.getElementById("excelDataSource");
-            if (dsSelect) {
-              const opt = Array.from(dsSelect.options).find(o => o.value === activeContextMenuTarget);
-              if (opt) opt.textContent = newName.trim();
-            }
-          }
-        }
-      });
-    }
-    hideExcelContextMenu();
-  });
-  
-  document.getElementById("ctxDeleteSheet").addEventListener("click", () => {
-    if (activeContextMenuType === "sheet" && activeContextMenuTarget) {
-      customConfirm(currentLang === 'ru' ? "Точно удалить этот лист?" : "Are you sure you want to delete this sheet?", (confirmed) => {
-        if (confirmed) {
-          const customSheets = JSON.parse(localStorage.getItem("brakeExcelCustomSheets") || "[]");
-          const filtered = customSheets.filter(s => s.id !== activeContextMenuTarget);
-          localStorage.setItem("brakeExcelCustomSheets", JSON.stringify(filtered));
-          
-          // Remove from select
-          const dsSelect = document.getElementById("excelDataSource");
-          if (dsSelect) {
-            const opt = Array.from(dsSelect.options).find(o => o.value === activeContextMenuTarget);
-            if (opt) opt.remove();
-            if (dsSelect.value === activeContextMenuTarget) {
-              dsSelect.value = "orders";
-            }
-          }
-          
-          // Clean up data
-          localStorage.removeItem(`brakeExcelCols_${activeContextMenuTarget}`);
-          localStorage.removeItem(`brakeExcelColNames_${activeContextMenuTarget}`);
-          localStorage.removeItem(`brakeExcelData_${activeContextMenuTarget}`);
-          localStorage.removeItem(`brakeExcelStyles_${activeContextMenuTarget}`);
-          
-          renderExcelSheetTabs();
-          renderExcelGrid();
-        }
-      });
-    }
-    hideExcelContextMenu();
-  });
-  
-  document.getElementById("ctxRenameCol").addEventListener("click", () => {
-    if (activeContextMenuType === "col" && activeContextMenuTarget && activeContextMenuExtra) {
-      const col = activeContextMenuTarget;
-      const { colNames, namesKey } = activeContextMenuExtra;
-      customPrompt(currentLang === 'ru' ? `Новое имя для столбца ${col}:` : `New name for column ${col}:`, colNames[col] || '', (newName) => {
-        if (newName !== null) {
-          colNames[col] = newName.trim();
-          localStorage.setItem(namesKey, JSON.stringify(colNames));
-          renderExcelGrid();
-        }
-      });
-    }
-    hideExcelContextMenu();
-  });
-
-  document.getElementById("ctxDeleteCol").addEventListener("click", () => {
-    if (activeContextMenuType === "col" && activeContextMenuTarget && activeContextMenuExtra) {
-      customConfirm(currentLang === 'ru' ? "Удалить столбец?" : "Delete column?", (confirmed) => {
-        if (confirmed) {
-          const col = activeContextMenuTarget;
-          let { cols, colsKey } = activeContextMenuExtra;
-          cols = cols.filter(c => c !== col);
-          localStorage.setItem(colsKey, JSON.stringify(cols));
-          renderExcelGrid();
-        }
-      });
-    }
-    hideExcelContextMenu();
-  });
-
-  // Basic row deletion (just shifts data up visually or clears it)
-  document.getElementById("ctxDeleteRow").addEventListener("click", () => {
-    if (activeContextMenuType === "row" && activeContextMenuTarget) {
-      customConfirm(currentLang === 'ru' ? "Очистить строку?" : "Clear row?", (confirmed) => {
-        if (confirmed) {
-          const row = parseInt(activeContextMenuTarget);
-          const activeCols = getActiveCols();
-          activeCols.forEach(c => {
-            delete excelData[`${c}${row}`];
-          });
-          renderExcelGrid();
-        }
-      });
-    }
-    hideExcelContextMenu();
-  });
-});
-
-
-function resolveCellVal(cellId, visited) {
-  const raw = excelData[cellId] || "0";
-  if (raw.startsWith("=")) {
-    return parseExcelFormula(raw, cellId, new Set(visited));
-  }
-  return raw;
-}
-
-function parseExcelFormula(val, activeCellId = null, visited = new Set()) {
-  if (typeof val === 'string' && val.startsWith("=")) {
-    if (activeCellId) {
-      if (visited.has(activeCellId)) {
-        return "#CYCLE!";
-      }
-      visited.add(activeCellId);
-    }
-    const upperVal = val.toUpperCase();
-    
-    // Σ SUM
-    const sumMatch = upperVal.match(/=SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
-    if (sumMatch) {
-      const colStart = sumMatch[1];
-      const rStart = parseInt(sumMatch[2]);
-      const colEnd = sumMatch[3];
-      const rEnd = parseInt(sumMatch[4]);
-      
-      let sum = 0;
-      for (let r = rStart; r <= rEnd; r++) {
-        const cellId = `${colStart}${r}`;
-        const cellVal = resolveCellVal(cellId, visited);
-        if (cellVal === "#CYCLE!") return "#CYCLE!";
-        const numeric = parseFloat(cellVal.replace(/[^0-9.-]/g, "")) || 0;
-        sum += numeric;
-      }
-      return `$${sum.toFixed(2)}`;
-    }
-    
-    // Avg AVERAGE
-    const avgMatch = upperVal.match(/=AVERAGE\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
-    if (avgMatch) {
-      const colStart = avgMatch[1];
-      const rStart = parseInt(avgMatch[2]);
-      const colEnd = avgMatch[3];
-      const rEnd = parseInt(avgMatch[4]);
-      
-      let sum = 0, count = 0;
-      for (let r = rStart; r <= rEnd; r++) {
-        const cellId = `${colStart}${r}`;
-        const cellVal = resolveCellVal(cellId, visited);
-        if (cellVal === "#CYCLE!") return "#CYCLE!";
-        const numeric = parseFloat(cellVal.replace(/[^0-9.-]/g, "")) || 0;
-        sum += numeric;
-        count++;
-      }
-      return `$${(count > 0 ? sum / count : 0).toFixed(2)}`;
-    }
-    
-    // Min MIN
-    const minMatch = upperVal.match(/=MIN\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
-    if (minMatch) {
-      const colStart = minMatch[1];
-      const rStart = parseInt(minMatch[2]);
-      const colEnd = minMatch[3];
-      const rEnd = parseInt(minMatch[4]);
-      
-      let minVal = Infinity;
-      for (let r = rStart; r <= rEnd; r++) {
-        const cellId = `${colStart}${r}`;
-        const cellVal = resolveCellVal(cellId, visited);
-        if (cellVal === "#CYCLE!") return "#CYCLE!";
-        const numeric = parseFloat(cellVal.replace(/[^0-9.-]/g, "")) || 0;
-        if (numeric < minVal) minVal = numeric;
-      }
-      return `$${(minVal === Infinity ? 0 : minVal).toFixed(2)}`;
-    }
-    
-    // Max MAX
-    const maxMatch = upperVal.match(/=MAX\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
-    if (maxMatch) {
-      const colStart = maxMatch[1];
-      const rStart = parseInt(maxMatch[2]);
-      const colEnd = maxMatch[3];
-      const rEnd = parseInt(maxMatch[4]);
-      
-      let maxVal = -Infinity;
-      for (let r = rStart; r <= rEnd; r++) {
-        const cellId = `${colStart}${r}`;
-        const cellVal = resolveCellVal(cellId, visited);
-        if (cellVal === "#CYCLE!") return "#CYCLE!";
-        const numeric = parseFloat(cellVal.replace(/[^0-9.-]/g, "")) || 0;
-        if (numeric > maxVal) maxVal = numeric;
-      }
-      return `$${(maxVal === -Infinity ? 0 : maxVal).toFixed(2)}`;
-    }
-
-    // COUNT
-    const countMatch = upperVal.match(/=COUNT\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
-    if (countMatch) {
-      const colStart = countMatch[1];
-      const rStart = parseInt(countMatch[2]);
-      const colEnd = countMatch[3];
-      const rEnd = parseInt(countMatch[4]);
-      
-      let count = 0;
-      for (let r = rStart; r <= rEnd; r++) {
-        const cellId = `${colStart}${r}`;
-        const cellVal = resolveCellVal(cellId, visited);
-        if (cellVal === "#CYCLE!") return "#CYCLE!";
-        if (cellVal && !isNaN(parseFloat(cellVal.replace(/[^0-9.-]/g, "")))) {
-          count++;
-        }
-      }
-      return count.toString();
-    }
-    
-    // PRODUCT
-    const prodMatch = upperVal.match(/=PRODUCT\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
-    if (prodMatch) {
-      const colStart = prodMatch[1];
-      const rStart = parseInt(prodMatch[2]);
-      const colEnd = prodMatch[3];
-      const rEnd = parseInt(prodMatch[4]);
-      
-      let prod = 1;
-      let hasVal = false;
-      for (let r = rStart; r <= rEnd; r++) {
-        const cellId = `${colStart}${r}`;
-        const cellVal = resolveCellVal(cellId, visited);
-        if (cellVal === "#CYCLE!") return "#CYCLE!";
-        if (cellVal) {
-          const numeric = parseFloat(cellVal.replace(/[^0-9.-]/g, "")) || 0;
-          prod *= numeric;
-          hasVal = true;
-        }
-      }
-      return `$${(hasVal ? prod : 0).toFixed(2)}`;
-    }
-
-    // Safe Arithmetic Math Operators (e.g., =E1*F1 or =E1*1.2 or =E1-E2)
-    if (/^[=0-9A-Z\+\-\*\/\(\)\.\s]+$/.test(upperVal)) {
-      let expression = upperVal.substring(1); // remove "="
-      const cellRefRegex = /[A-Z]+\d+/g;
-      
-      let containsCycle = false;
-      expression = expression.replace(cellRefRegex, (cellId) => {
-        const cellVal = resolveCellVal(cellId, visited);
-        if (cellVal === "#CYCLE!") {
-          containsCycle = true;
-          return "0";
-        }
-        let numeric = parseFloat(cellVal.toString().replace(/[^0-9.-]/g, "")) || 0;
-        return numeric.toString();
-      });
-      
-      if (containsCycle) return "#CYCLE!";
-      
-      if (/^[0-9\+\-\*\/\(\)\.\s]+$/.test(expression)) {
-        try {
-          const result = new Function(`return (${expression})`)();
-          if (typeof result === 'number' && !isNaN(result)) {
-            return result % 1 === 0 ? result.toString() : `$${result.toFixed(2)}`;
-          }
-        } catch (err) {
-          return "#VALUE!";
-        }
-      }
-    }
-    
-    return "#ERROR";
-  }
-  return val;
-}
-
-function renderExcelGrid() {
-  if (!excelSpreadsheet) return;
-  
-  const activeMfg = getActiveManufacturer();
-  const dsSelect = document.getElementById("excelDataSource");
-  const dataSource = dsSelect ? dsSelect.value : "orders";
-  
-  excelSpreadsheet.innerHTML = "";
-  
-  let defaultCols, defaultColNames;
-  
-  if (dataSource === "products") {
-    defaultCols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
-    defaultColNames = {
-      A: "ID Товара",
-      B: "Название",
-      C: "Бренд",
-      D: "Производитель",
-      E: "Цена ($)",
-      F: "В наличии",
-      G: "Видим (👁️)",
-      H: "SEO Заголовок",
-      I: "SEO Описание",
-      J: "SEO Ключи"
-    };
-  } else if (dataSource === "orders") {
-    defaultCols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"];
-    defaultColNames = {
-      A: "ID Заказа",
-      B: "Дата",
-      C: "Клиент",
-      D: "Сумма ($)",
-      E: "Статус",
-      F: "Адрес",
-      G: "Комментарий",
-      H: "Способ связи",
-      I: "Контакт",
-      J: "Служба доставки",
-      K: "Трек-номер"
-    };
-  } else {
-    // Custom Sheets default structure
-    defaultCols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"];
-    defaultColNames = {
-      A: "Колонка 1", B: "Колонка 2", C: "Колонка 3", D: "Колонка 4", E: "Колонка 5",
-      F: "Колонка 6", G: "Колонка 7", H: "Колонка 8", I: "Колонка 9", J: "Колонка 10", K: "Колонка 11"
-    };
-  }
-
-  let colsKey = `brakeExcelCols_${dataSource}`;
-  let namesKey = `brakeExcelColNames_${dataSource}`;
-
-  let cols = JSON.parse(localStorage.getItem(colsKey) || "null");
-  let colNames = JSON.parse(localStorage.getItem(namesKey) || "null");
-  
-  if (!cols || !colNames) {
-    cols = defaultCols;
-    colNames = defaultColNames;
-    localStorage.setItem(colsKey, JSON.stringify(cols));
-    localStorage.setItem(namesKey, JSON.stringify(colNames));
-  }
-  
-  // Render Headers with Sort Buttons
-  let headerHtml = `<tr><th style="width:40px;" class="excel-corner-header"></th>`;
-  cols.forEach(c => {
-    const isSorted = excelSortState.column === c;
-    const sortIcon = isSorted ? (excelSortState.direction === "asc" ? " 🔼" : " 🔽") : " ⇅";
-    headerHtml += `<th style="padding:0; z-index:10; cursor:pointer;" class="excel-header-sort" data-col="${c}">
-      <div class="excel-resizable-header" style="resize:horizontal; overflow:auto; min-width:110px; padding:0.4rem 0.8rem; box-sizing:border-box; display:flex; justify-content:space-between; align-items:center; user-select:none;">
-        <span>${c} <span class="col-name">(${colNames[c] || ''})</span></span>
-        <span style="font-size:0.75rem; color:${isSorted ? 'var(--color-primary-start)' : '#666'};">${sortIcon}</span>
-      </div>
-    </th>`;
-  });
-  headerHtml += `</tr>`;
-  excelSpreadsheet.innerHTML += headerHtml;
-  
-  let rowCount = 0;
-  let filteredProducts = [];
-  let filteredOrders = [];
-  
-  if (dataSource === "products") {
-    filteredProducts = products.filter(p => {
-      const pMfg = p.manufacturer || "Garage1";
-      if (activeMfg === "all") return true;
-      return pMfg === activeMfg;
-    });
-    
-    // Group products so Excel shows only one entry per groupId
-    const handledGroups = new Set();
-    const excelProducts = [];
-    filteredProducts.forEach(p => {
-      if (!p.groupId) {
-        excelProducts.push(p);
-      } else {
-        if (!handledGroups.has(p.groupId)) {
-          handledGroups.add(p.groupId);
-          excelProducts.push(p);
-        }
-      }
-    });
-    
-    // Sort columns if requested
-    if (excelSortState.column) {
-      const col = excelSortState.column;
-      const dir = excelSortState.direction === "asc" ? 1 : -1;
-      excelProducts.sort((a, b) => {
-        let valA, valB;
-        if (col === "A") { valA = a.id; valB = b.id; }
-        else if (col === "B") { valA = (a.name || "").toLowerCase(); valB = (b.name || "").toLowerCase(); }
-        else if (col === "C") { valA = (a.brand || "").toLowerCase(); valB = (b.brand || "").toLowerCase(); }
-        else if (col === "D") { valA = (a.manufacturer || "").toLowerCase(); valB = (b.manufacturer || "").toLowerCase(); }
-        else if (col === "E") { valA = parseFloat(a.price) || 0; valB = parseFloat(b.price) || 0; }
-        else if (col === "F") { valA = a.stock ? 1 : 0; valB = b.stock ? 1 : 0; }
-        else if (col === "G") { valA = a.visible !== false ? 1 : 0; valB = b.visible !== false ? 1 : 0; }
-        else if (col === "H") { valA = (a.seoTitle || "").toLowerCase(); valB = (b.seoTitle || "").toLowerCase(); }
-        else if (col === "I") { valA = (a.seoDesc || "").toLowerCase(); valB = (b.seoDesc || "").toLowerCase(); }
-        else if (col === "J") { valA = (a.seoKeywords || "").toLowerCase(); valB = (b.seoKeywords || "").toLowerCase(); }
-        else { return 0; }
-        
-        if (valA < valB) return -1 * dir;
-        if (valA > valB) return 1 * dir;
-        return 0;
-      });
-    }
-    
-    rowCount = excelProducts.length;
-    
-    excelProducts.forEach((p, index) => {
-      const rowIdx = index + 1;
-      excelData[`A${rowIdx}`] = p.id.toString();
-      excelData[`B${rowIdx}`] = p.name || "";
-      excelData[`C${rowIdx}`] = p.brand || "";
-      excelData[`D${rowIdx}`] = p.manufacturer || "Garage1";
-      excelData[`E${rowIdx}`] = (p.price || 0).toString();
-      excelData[`F${rowIdx}`] = p.stock ? "true" : "false";
-      excelData[`G${rowIdx}`] = p.visible !== false ? "true" : "false";
-      excelData[`H${rowIdx}`] = p.seoTitle || "";
-      excelData[`I${rowIdx}`] = p.seoDesc || "";
-      excelData[`J${rowIdx}`] = p.seoKeywords || "";
-    });
-  } else if (dataSource === "orders") {
-    const orders = JSON.parse(localStorage.getItem("brakeOrders") || "[]");
-    
-    filteredOrders = orders.filter(o => {
-      if (activeMfg === "all") return true;
-      return o.items.some(item => {
-        const p = products.find(prod => prod.id == item.id);
-        const pMfg = p ? (p.manufacturer || "Garage1") : "Garage1";
-        return pMfg === activeMfg;
-      });
-    });
-    
-    // Sort columns if requested
-    if (excelSortState.column) {
-      const col = excelSortState.column;
-      const dir = excelSortState.direction === "asc" ? 1 : -1;
-      filteredOrders.sort((a, b) => {
-        let valA, valB;
-        if (col === "A") { valA = a.id; valB = b.id; }
-        else if (col === "B") { valA = new Date(a.date).getTime(); valB = new Date(b.date).getTime(); }
-        else if (col === "C") { valA = (a.customer?.name || "").toLowerCase(); valB = (b.customer?.name || "").toLowerCase(); }
-        else if (col === "D") {
-          const totalA = parseFloat((a.total || "0").replace(/[^0-9.-]/g, "")) || 0;
-          const totalB = parseFloat((b.total || "0").replace(/[^0-9.-]/g, "")) || 0;
-          valA = totalA; valB = totalB;
-        }
-        else if (col === "E") { valA = (a.status || "").toLowerCase(); valB = (b.status || "").toLowerCase(); }
-        else if (col === "F") { valA = (a.customer?.address || "").toLowerCase(); valB = (b.customer?.address || "").toLowerCase(); }
-        else if (col === "G") { valA = (a.comment || "").toLowerCase(); valB = (b.comment || "").toLowerCase(); }
-        else if (col === "H") { valA = (a.preferredContact || "").toLowerCase(); valB = (b.preferredContact || "").toLowerCase(); }
-        else if (col === "I") { valA = (a.contactValue || "").toLowerCase(); valB = (b.contactValue || "").toLowerCase(); }
-        else if (col === "J") { valA = (a.shippingCarrier || "").toLowerCase(); valB = (b.shippingCarrier || "").toLowerCase(); }
-        else if (col === "K") { valA = (a.trackingNumber || "").toLowerCase(); valB = (b.trackingNumber || "").toLowerCase(); }
-        else { return 0; }
-        
-        if (valA < valB) return -1 * dir;
-        if (valA > valB) return 1 * dir;
-        return 0;
-      });
-    }
-    
-    rowCount = filteredOrders.length;
-    
-    filteredOrders.forEach((o, index) => {
-      const rowIdx = index + 1;
-      excelData[`A${rowIdx}`] = o.id.toString();
-      excelData[`B${rowIdx}`] = new Date(o.date).toLocaleDateString();
-      excelData[`C${rowIdx}`] = o.customer?.name || "—";
-      
-      let subtotal = o.total;
-      if (activeMfg !== "all") {
-        const mfgItems = o.items.filter(item => {
-          const p = products.find(prod => prod.id == item.id);
-          const pMfg = p ? (p.manufacturer || "Garage1") : "Garage1";
-          return pMfg === activeMfg;
-        });
-        const numericSub = mfgItems.reduce((sum, it) => sum + ((it.price || 0) * it.qty), 0);
-        subtotal = numericSub.toFixed(2);
-      } else {
-        subtotal = parseFloat(o.total.replace(/[^0-9.-]/g, "")) || 0;
-      }
-      
-      excelData[`D${rowIdx}`] = subtotal.toString();
-      excelData[`E${rowIdx}`] = o.status || "paid";
-      excelData[`F${rowIdx}`] = o.customer?.address || "—";
-      excelData[`G${rowIdx}`] = o.comment || "";
-      excelData[`H${rowIdx}`] = o.preferredContact || "—";
-      excelData[`I${rowIdx}`] = o.contactValue || "";
-      excelData[`J${rowIdx}`] = o.shippingCarrier || "";
-      excelData[`K${rowIdx}`] = o.trackingNumber || "";
-    });
-  } else {
-    // Custom sheets datasource (e.g. custom_123)
-    const customData = JSON.parse(localStorage.getItem(`brakeExcelData_${dataSource}`) || "{}");
-    Object.assign(excelData, customData);
-    rowCount = 15;
-  }
-  
-  // Render Rows: populated rows + 5 empty slots at the bottom for calculations
-  const totalRowsCount = rowCount + 5;
-  const cellStyles = JSON.parse(localStorage.getItem(`brakeExcelStyles_${dataSource}`) || "{}");
-  
-  for (let r = 1; r <= totalRowsCount; r++) {
-    let rowHtml = `<tr><td style="background:#1a1e2e; text-align:center; font-weight:bold; color:#888; padding:0;" class="excel-row-header" data-row="${r}"><div class="excel-resizable-row" style="resize:vertical; overflow:auto; min-height:25px; display:flex; align-items:center; justify-content:center; box-sizing:border-box; user-select:none;">${r}</div></td>`;
-    cols.forEach(c => {
-      const cellId = `${c}${r}`;
-      const cellValue = excelData[cellId] || "";
-      const displayVal = parseExcelFormula(cellValue, cellId);
-      
-      // Load saved styles
-      let styleAttr = "";
-      const s = cellStyles[cellId];
-      if (s) {
-        styleAttr = `style="${s.bold ? 'font-weight:bold;' : ''} ${s.italic ? 'font-style:italic;' : ''} ${s.underline ? 'text-decoration:underline;' : ''} ${s.background ? 'background-color:' + s.background + ';' : ''} ${s.color ? 'color:' + s.color + ';' : ''}"`;
-      }
-      
-      rowHtml += `<td contenteditable="true" class="excel-cell-edit" data-cell="${cellId}" ${styleAttr}>${displayVal}</td>`;
-    });
-    rowHtml += `</tr>`;
-    excelSpreadsheet.innerHTML += rowHtml;
-  }
-  
-  // Attach Sort Listeners and Context Menu for Columns
-  excelSpreadsheet.querySelectorAll(".excel-header-sort").forEach(th => {
-    th.addEventListener("click", (e) => {
-      // Don't sort if clicking on context menu or dragging resize (simple check: if not a direct click on header div)
-      const col = th.dataset.col;
-      if (excelSortState.column === col) {
-        excelSortState.direction = excelSortState.direction === "asc" ? "desc" : "asc";
-      } else {
-        excelSortState.column = col;
-        excelSortState.direction = "asc";
-      }
-      renderExcelGrid();
-    });
-    
-    th.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
-      const col = th.dataset.col;
-      const currentName = colNames[col] || '';
-      customPrompt(currentLang === 'ru' ? `Новое имя для столбца ${col}:` : `New name for column ${col}:`, currentName, (newName) => {
-        if (newName !== null) {
-          colNames[col] = newName.trim();
-          localStorage.setItem(namesKey, JSON.stringify(colNames));
-          renderExcelGrid();
-        }
-      });
-    });
-
-    th.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      showExcelContextMenu(e.clientX, e.clientY, "col", th.dataset.col, { colNames, cols, namesKey, colsKey });
-    });
-  });
-
-  // Attach Context Menu for Rows
-  excelSpreadsheet.querySelectorAll(".excel-row-header").forEach(td => {
-    td.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      showExcelContextMenu(e.clientX, e.clientY, "row", td.dataset.row, null);
-    });
-  });
-  
-  // Attach cell change and focus handlers
-  excelSpreadsheet.querySelectorAll(".excel-cell-edit").forEach(td => {
-    const cellId = td.dataset.cell;
-    
-    // Focus displays exact formula/raw value
-    td.addEventListener("focus", () => {
-      // Record original value to check if it changed on blur
-      td.dataset.originalVal = excelData[cellId] || "";
-      
-      const rawVal = excelData[cellId] || "";
-      td.textContent = rawVal;
-      activeCellElement = td; // track selected cell
-      
-      // Update Formula Bar UI
-      const fInput = document.getElementById("excelFormulaInput");
-      const fActiveCell = document.getElementById("excelActiveCellId");
-      if (fInput) fInput.value = rawVal;
-      if (fActiveCell) fActiveCell.textContent = cellId;
-      
-      // Highlight toolbar elements to match styles
-      const cellStyles = JSON.parse(localStorage.getItem(`brakeExcelStyles_${dataSource}`) || "{}");
-      const s = cellStyles[cellId] || {};
-      document.getElementById("excelFormatBold").style.background = s.bold ? "var(--color-primary-start)" : "#444";
-      document.getElementById("excelFormatItalic").style.background = s.italic ? "var(--color-primary-start)" : "#444";
-      document.getElementById("excelFormatUnderline").style.background = s.underline ? "var(--color-primary-start)" : "#444";
-      document.getElementById("excelBgColor").value = s.background || "transparent";
-      document.getElementById("excelTextColor").value = s.color || "#ffffff";
-    });
-    
-    // Autocomplete on cell keyup/input
-    td.addEventListener("input", (e) => {
-      const txt = td.textContent;
-      
-      // Sync to Formula Bar
-      const fInput = document.getElementById("excelFormulaInput");
-      if (fInput) fInput.value = txt;
-      
-      if (txt.startsWith("=")) {
-        showFormulaSuggestions(td, txt);
-      } else {
-        hideFormulaSuggestions();
-      }
-    });
-
-    td.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" || e.key === "Enter") {
-        hideFormulaSuggestions();
-      }
-    });
-
-    // Blur recalculates spreadsheet
-    td.addEventListener("blur", () => {
-      const newVal = td.textContent.trim();
-      if (newVal !== (td.dataset.originalVal || "")) {
-        pushExcelState(); // Save state before updating excelData
-      }
-      excelData[cellId] = newVal;
-      
-      // Delay blur evaluation slightly to allow autocomplete click to complete
-      setTimeout(() => {
-        hideFormulaSuggestions();
-        
-        // Full grid evaluation
-        excelSpreadsheet.querySelectorAll(".excel-cell-edit").forEach(cell => {
-          const cid = cell.dataset.cell;
-          const rawVal = excelData[cid] || "";
-          if (cell !== td) {
-            cell.textContent = parseExcelFormula(rawVal, cid);
-          }
-        });
-        
-        // Update our own displayed val
-        td.textContent = parseExcelFormula(excelData[cellId], cellId);
-      }, 200);
-    });
-
-    td.addEventListener("mousedown", (e) => {
-      if (isExcelMoveMode) {
-        e.preventDefault();
-        pasteMovedRange(cellId);
-        return;
-      }
-      
-      if (td.classList.contains("excel-cell-selected") && excelSelectedRange) {
-        // If clicking on the only selected cell, let native mousedown place the caret (don't block selectstart)
-        if (excelSelectedRange.rStart === excelSelectedRange.rEnd && excelSelectedRange.cStart === excelSelectedRange.cEnd) {
-          return;
-        }
-      }
-      
-      if (e.button === 0) { // left button
-        isExcelSelecting = true;
-        const activeCols = getActiveCols();
-        const match = cellId.match(/^([A-Z]+)(\d+)$/);
-        if (match) {
-          const colLetter = match[1];
-          const rowNum = parseInt(match[2]);
-          excelSelectStart = { colIdx: activeCols.indexOf(colLetter), rowIdx: rowNum };
-          excelSelectEnd = Object.assign({}, excelSelectStart);
-          updateVisualSelection(activeCols);
-        }
-      }
-    });
-
-    td.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-    });
-
-    td.addEventListener("drop", (e) => {
-      e.preventDefault();
-      if (isExcelMoveMode && excelMoveSourceRange) {
-        pasteMovedRange(cellId);
-      }
-    });
-
-    td.addEventListener("mouseenter", () => {
-      if (isExcelAutofilling && excelAutofillSourceCellId) {
-        const srcCol = excelAutofillSourceCellId.match(/^([A-Z]+)/)[1];
-        const targetMatch = cellId.match(/^([A-Z]+)(\d+)/);
-        if (targetMatch && targetMatch[1] === srcCol) {
-          const srcRow = parseInt(excelAutofillSourceCellId.match(/\d+/)[0]);
-          const targetRow = parseInt(targetMatch[2]);
-          
-          if (targetRow >= srcRow) {
-            excelAutofillTargetCells = [];
-            excelSpreadsheet.querySelectorAll(".excel-cell-edit").forEach(cell => {
-              const cid = cell.dataset.cell;
-              const match = cid.match(/^([A-Z]+)(\d+)$/);
-              if (match && match[1] === srcCol) {
-                const r = parseInt(match[2]);
-                if (r > srcRow && r <= targetRow) {
-                  cell.classList.add("excel-cell-selected");
-                  excelAutofillTargetCells.push(cid);
-                } else if (cid !== excelAutofillSourceCellId) {
-                  cell.classList.remove("excel-cell-selected");
-                }
-              }
-            });
-          }
-        }
-        return;
-      }
-      
-      if (!isExcelSelecting || !excelSelectStart) return;
-      const activeCols = getActiveCols();
-      const match = cellId.match(/^([A-Z]+)(\d+)$/);
-      if (match) {
-        const colLetter = match[1];
-        const rowNum = parseInt(match[2]);
-        excelSelectEnd = { colIdx: activeCols.indexOf(colLetter), rowIdx: rowNum };
-        updateVisualSelection(activeCols);
-      }
-    });
-  });
-
-  // Dynamically render custom sheet tabs and highlight active sheet
-  renderExcelSheetTabs();
-}
-
-// Floating Autocomplete Suggestion Controller
-const formulaSuggestionsEl = document.getElementById("excelFormulaSuggestions");
-
-const STANDARD_FORMULAS = [
-  { name: "SUM", desc: "Сумма ячеек: =SUM(D1:D5)", snippet: "=SUM(D1:D5)" },
-  { name: "AVERAGE", desc: "Среднее значение: =AVERAGE(D1:D5)", snippet: "=AVERAGE(D1:D5)" },
-  { name: "MIN", desc: "Минимальное значение: =MIN(D1:D5)", snippet: "=MIN(D1:D5)" },
-  { name: "MAX", desc: "Максимальное значение: =MAX(D1:D5)", snippet: "=MAX(D1:D5)" },
-  { name: "COUNT", desc: "Количество числовых ячеек: =COUNT(D1:D5)", snippet: "=COUNT(D1:D5)" },
-  { name: "PRODUCT", desc: "Произведение ячеек: =PRODUCT(D1:D5)", snippet: "=PRODUCT(D1:D5)" }
-];
-
-function showFormulaSuggestions(cellTd, val) {
-  if (!formulaSuggestionsEl) return;
-  
-  const query = val.slice(1).toUpperCase(); // remove '='
-  const matches = STANDARD_FORMULAS.filter(f => f.name.startsWith(query) || query === "");
-  
-  if (matches.length === 0) {
-    formulaSuggestionsEl.style.display = "none";
-    return;
-  }
-  
-  formulaSuggestionsEl.innerHTML = "";
-  
-  matches.forEach(f => {
-    const div = document.createElement("div");
-    div.style.padding = "0.5rem 1rem";
-    div.style.cursor = "pointer";
-    div.style.borderBottom = "1px solid rgba(255,255,255,0.03)";
-    div.style.color = "#fff";
-    div.style.transition = "background 0.2s";
-    
-    div.innerHTML = `
-      <div style="font-weight:bold; color:var(--color-primary-start);">${f.name}</div>
-      <div style="font-size:0.7rem; color:#aaa;">${f.desc}</div>
-    `;
-    
-    div.addEventListener("mouseover", () => {
-      div.style.background = "rgba(255,85,0,0.15)";
-    });
-    div.addEventListener("mouseout", () => {
-      div.style.background = "transparent";
-    });
-    
-    div.addEventListener("mousedown", (e) => {
-      e.preventDefault(); // prevent losing focus from cellTd
-      cellTd.textContent = f.snippet;
-      excelData[cellTd.dataset.cell] = f.snippet;
-      cellTd.focus();
-      hideFormulaSuggestions();
-    });
-    
-    formulaSuggestionsEl.appendChild(div);
-  });
-  
-  // Position Floating Autocomplete below the cell
-  const rect = cellTd.getBoundingClientRect();
-  const containerRect = cellTd.offsetParent.getBoundingClientRect();
-  
-  formulaSuggestionsEl.style.left = `${rect.left - containerRect.left}px`;
-  formulaSuggestionsEl.style.top = `${rect.bottom - containerRect.top}px`;
-  formulaSuggestionsEl.style.display = "block";
-}
-
-function hideFormulaSuggestions() {
-  if (formulaSuggestionsEl) {
-    formulaSuggestionsEl.style.display = "none";
-  }
-}
-
-// Hook Excel DataSource Switcher
-const excelDataSourceEl = document.getElementById("excelDataSource");
-if (excelDataSourceEl) {
-  excelDataSourceEl.addEventListener("change", () => {
-    renderExcelGrid();
-  });
-}
-
-// Hook Excel Custom Sheet Creator (+) Button
-const addSheetBtn = document.getElementById("excelAddSheetBtn");
-if (addSheetBtn) {
-  addSheetBtn.addEventListener("click", () => {
-    customPrompt(currentLang === 'ru' ? "Введите название нового листа (например: Лист 3: Цены):" : "Enter a name for the new sheet:", "", (sheetName) => {
-      if (!sheetName || !sheetName.trim()) return;
-      
-      const sheetId = "custom_" + Date.now();
-      const customSheets = JSON.parse(localStorage.getItem("brakeExcelCustomSheets") || "[]");
-      customSheets.push({ id: sheetId, name: sheetName.trim() });
-      localStorage.setItem("brakeExcelCustomSheets", JSON.stringify(customSheets));
-      
-      // Default columns layout configuration for the new custom sheet
-      const colsKey = `brakeExcelCols_${sheetId}`;
-      const namesKey = `brakeExcelColNames_${sheetId}`;
-      localStorage.setItem(colsKey, JSON.stringify(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"]));
-      localStorage.setItem(namesKey, JSON.stringify({
-        A: "Колонка 1", B: "Колонка 2", C: "Колонка 3", D: "Колонка 4", E: "Колонка 5",
-        F: "Колонка 6", G: "Колонка 7", H: "Колонка 8", I: "Колонка 9", J: "Колонка 10", K: "Колонка 11"
-      }));
-      
-      const dsSelect = document.getElementById("excelDataSource");
-      if (dsSelect) {
-        const opt = document.createElement("option");
-        opt.value = sheetId;
-        opt.textContent = sheetName;
-        dsSelect.appendChild(opt);
-        dsSelect.value = sheetId;
-      }
-      
-      renderExcelSheetTabs();
-      renderExcelGrid();
-      showToast(currentLang === 'ru' ? `Новый лист "${sheetName}" успешно создан!` : `New sheet "${sheetName}" successfully created!`);
-    });
-  });
-}
-
-// Range Selection and Autofill mouseup global listener
-document.addEventListener("mouseup", () => {
-  if (isExcelAutofilling) {
-    isExcelAutofilling = false;
-    if (excelAutofillSourceCellId && excelAutofillTargetCells.length > 0) {
-      pushExcelState(); // Save state for Undo before copying!
-      
-      const rawVal = excelData[excelAutofillSourceCellId] || "";
-      const sourceMatch = excelAutofillSourceCellId.match(/^([A-Z]+)(\d+)$/);
-      const sourceRow = sourceMatch ? parseInt(sourceMatch[2]) : 0;
-      
-      excelAutofillTargetCells.forEach(targetCellId => {
-        const targetMatch = targetCellId.match(/^([A-Z]+)(\d+)$/);
-        if (targetMatch) {
-          const targetRow = parseInt(targetMatch[2]);
-          const rowDiff = targetRow - sourceRow;
-          
-          if (rawVal.startsWith("=")) {
-            excelData[targetCellId] = adjustFormula(rawVal, rowDiff);
-          } else {
-            excelData[targetCellId] = rawVal;
-          }
-        }
-      });
-      
-      renderExcelGrid();
-      showToast(currentLang === 'ru' ? "Формулы автозаполнены!" : "Formulas autofilled!");
-    }
-    
-    // Clear selection highlights
-    excelSpreadsheet.querySelectorAll(".excel-cell-edit").forEach(cell => {
-      cell.classList.remove("excel-cell-selected");
-    });
-    
-    excelAutofillSourceCellId = null;
-    excelAutofillTargetCells = [];
-    return;
-  }
-
-  if (isExcelSelecting) {
-    isExcelSelecting = false;
-    if (!excelSelectStart || !excelSelectEnd) return;
-    
-    const rStart = Math.min(excelSelectStart.rowIdx, excelSelectEnd.rowIdx);
-    const rEnd = Math.max(excelSelectStart.rowIdx, excelSelectEnd.rowIdx);
-    const cStart = Math.min(excelSelectStart.colIdx, excelSelectEnd.colIdx);
-    const cEnd = Math.max(excelSelectStart.colIdx, excelSelectEnd.colIdx);
-    
-    excelSelectedRange = { rStart, rEnd, cStart, cEnd };
-    
-    const totalCells = (rEnd - rStart + 1) * (cEnd - cStart + 1);
-    if (totalCells >= 1) {
-      showSelectionPopup();
-    } else {
-      hideSelectionPopup();
-    }
-  }
-});
-
-// Prevent standard text selections when click-and-dragging cells
-excelSpreadsheet.addEventListener("selectstart", (e) => {
-  if (isExcelSelecting) {
-    e.preventDefault();
-  }
-});
-
-// Copy / Paste support
-document.addEventListener("copy", (e) => {
-  // Check if we have an active excel selection, and focus is not inside an active cell formula input
-  if (excelSelectedRange && !document.getElementById("excelFormulaInput").matches(":focus")) {
-    const activeCols = getActiveCols();
-    const { rStart, rEnd, cStart, cEnd } = excelSelectedRange;
-    let tsv = "";
-    for (let r = rStart; r <= rEnd; r++) {
-      let rowVals = [];
-      for (let c = cStart; c <= cEnd; c++) {
-        if (c < activeCols.length) {
-          const colLetter = activeCols[c];
-          const cellId = `${colLetter}${r}`;
-          const val = excelData[cellId] || "";
-          rowVals.push(val);
-        }
-      }
-      tsv += rowVals.join("\t") + "\n";
-    }
-    if (tsv) {
-      e.preventDefault();
-      e.clipboardData.setData("text/plain", tsv);
-      showToast(currentLang === 'ru' ? "Диапазон скопирован" : "Range copied");
-    }
-  }
-});
-
-document.addEventListener("paste", (e) => {
-  if (activeCellElement || excelSelectedRange) {
-    // If formula input is focused, let native paste happen
-    if (document.getElementById("excelFormulaInput").matches(":focus")) return;
-    
-    const txt = (e.clipboardData || window.clipboardData).getData("text");
-    if (!txt) return;
-    
-    // Only intercept if we are pasting a grid (contains tabs or multiple lines) 
-    // or if we have an active selection we want to overwrite
-    e.preventDefault();
-    pushExcelState(); // save for undo
-    
-    const rows = txt.trimEnd().split(/\r?\n/).map(r => r.split("\t"));
-    const activeCols = getActiveCols();
-    let startRow, startColIdx;
-    
-    if (activeCellElement) {
-      const match = activeCellElement.dataset.cell.match(/^([A-Z]+)(\d+)$/);
-      if (match) {
-        startColIdx = activeCols.indexOf(match[1]);
-        startRow = parseInt(match[2]);
-      }
-    } else if (excelSelectedRange) {
-      startRow = Math.min(excelSelectedRange.rStart, excelSelectedRange.rEnd);
-      startColIdx = Math.min(excelSelectedRange.cStart, excelSelectedRange.cEnd);
-    }
-    
-    if (startRow && startColIdx !== -1) {
-      for (let i = 0; i < rows.length; i++) {
-        for (let j = 0; j < rows[i].length; j++) {
-          const r = startRow + i;
-          const cIdx = startColIdx + j;
-          if (cIdx < activeCols.length) {
-            const colLetter = activeCols[cIdx];
-            const cellId = `${colLetter}${r}`;
-            excelData[cellId] = rows[i][j];
-          }
-        }
-      }
-      renderExcelGrid();
-      showToast(currentLang === 'ru' ? "Вставлено из буфера" : "Pasted from clipboard");
-    }
-  }
-});
-
-// Hook Move selection action
-const moveRangeBtn = document.getElementById("excelMoveRangeBtn");
-if (moveRangeBtn) {
-  moveRangeBtn.addEventListener("click", () => {
-    if (!excelSelectedRange) return;
-    
-    excelMoveSourceRange = Object.assign({}, excelSelectedRange);
-    isExcelMoveMode = true;
-    hideSelectionPopup();
-    
-    excelSpreadsheet.style.cursor = "grabbing";
-    excelSpreadsheet.querySelectorAll(".excel-cell-edit").forEach(cell => {
-      cell.style.cursor = "grabbing";
-    });
-    
-    showToast(currentLang === 'ru' ? "Интерактивный перенос: Выберите левую верхнюю ячейку для вставки области" : "Interactive Move: Click the top-left destination cell to paste the selected range");
-  });
-}
-
-// Hook Cancel selection action
-const clearSelectionBtn = document.getElementById("excelClearSelectionBtn");
-if (clearSelectionBtn) {
-  clearSelectionBtn.addEventListener("click", () => {
-    clearExcelSelection();
-  });
-}
-
-// Hook Formula Bar Input events
-const formulaInput = document.getElementById("excelFormulaInput");
-if (formulaInput) {
-  formulaInput.addEventListener("input", () => {
-    if (!activeCellElement) return;
-    const cellId = activeCellElement.dataset.cell;
-    const txt = formulaInput.value;
-    excelData[cellId] = txt;
-    activeCellElement.textContent = txt; // dynamic cell update
-  });
-
-  formulaInput.addEventListener("blur", () => {
-    if (!activeCellElement) return;
-    const cellId = activeCellElement.dataset.cell;
-    
-    // Evaluate formulas across all cells
-    excelSpreadsheet.querySelectorAll(".excel-cell-edit").forEach(cell => {
-      const cid = cell.dataset.cell;
-      const rawVal = excelData[cid] || "";
-      if (cell !== activeCellElement) {
-        cell.textContent = parseExcelFormula(rawVal);
-      }
-    });
-    
-    activeCellElement.textContent = parseExcelFormula(excelData[cellId]);
-  });
-
-  formulaInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      formulaInput.blur();
-      activeCellElement?.blur();
-    }
-  });
-}
-
-// Hook CSV Export & Import actions
-const exportBtn = document.getElementById("excelExportCsvBtn");
-if (exportBtn) {
-  exportBtn.addEventListener("click", () => {
-    const dataSource = excelDataSourceEl ? excelDataSourceEl.value : "orders";
-    let colsKey = `brakeExcelCols_${dataSource}`;
-    let namesKey = `brakeExcelColNames_${dataSource}`;
-    let cols = JSON.parse(localStorage.getItem(colsKey) || "[]");
-    let colNames = JSON.parse(localStorage.getItem(namesKey) || "{}");
-    
-    let maxRow = 0;
-    Object.keys(excelData).forEach(key => {
-      const match = key.match(/[A-Z]+(\d+)/);
-      if (match) {
-        const r = parseInt(match[1]);
-        if (r > maxRow) maxRow = r;
-      }
-    });
-    
-    let csvRows = [];
-    let header = cols.map(c => `"${c} (${colNames[c] || ''})"`).join(",");
-    csvRows.push(header);
-    
-    for (let r = 1; r <= maxRow; r++) {
-      let rowVal = cols.map(c => {
-        let val = excelData[`${c}${r}`] || "";
-        return `"${val.replace(/"/g, '""')}"`;
-      }).join(",");
-      csvRows.push(rowVal);
-    }
-    
-    const csvContent = "\uFEFF" + csvRows.join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `brake_${dataSource}_export_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    showToast(currentLang === 'ru' ? 'Таблица экспортирована в CSV!' : 'Table successfully exported to CSV!');
-  });
-}
-
-const importBtn = document.getElementById("excelImportCsvBtn");
-const fileInput = document.getElementById("excelCsvFileInput");
-if (importBtn && fileInput) {
-  importBtn.addEventListener("click", () => fileInput.click());
-  fileInput.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        pushExcelState(); // Save state for Undo
-        const text = event.target.result;
-        const lines = text.split(/\r?\n/);
-        if (lines.length <= 1) return;
-        
-        const dataSource = excelDataSourceEl ? excelDataSourceEl.value : "orders";
-        let colsKey = `brakeExcelCols_${dataSource}`;
-        let cols = JSON.parse(localStorage.getItem(colsKey) || "[]");
-        
-        let rowIdx = 1;
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          
-          let matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
-          if (matches.length === 0) {
-            matches = line.split(",");
-          }
-          
-          matches.forEach((val, colIdx) => {
-            if (colIdx >= cols.length) return;
-            const colLetter = cols[colIdx];
-            const cellId = `${colLetter}${rowIdx}`;
-            let cleaned = val.replace(/^"|"$/g, "").replace(/""/g, '"');
-            excelData[cellId] = cleaned;
-          });
-          rowIdx++;
-        }
-        
-        renderExcelGrid();
-        showToast(currentLang === 'ru' ? `Импортировано ${rowIdx - 1} строк! Нажмите "Синхронизировать с Базой" для сохранения.` : `Successfully imported ${rowIdx - 1} rows! Click "Sync with Database" to save.`);
-      };
-      reader.readAsText(file);
-    }
-  });
-}
-
-// Hook Excel Toolbar Formatting elements
-function saveCellStyles(cellId, styleObj) {
-  const dsSelect = document.getElementById("excelDataSource");
-  const dataSource = dsSelect ? dsSelect.value : "orders";
-  const stylesKey = `brakeExcelStyles_${dataSource}`;
-  
-  const cellStyles = JSON.parse(localStorage.getItem(stylesKey) || "{}");
-  cellStyles[cellId] = Object.assign({}, cellStyles[cellId] || {}, styleObj);
-  localStorage.setItem(stylesKey, JSON.stringify(cellStyles));
-}
-
-// Undo / Redo Toolbar buttons click event listeners
-const undoBtnEl = document.getElementById("excelUndoBtn");
-if (undoBtnEl) {
-  undoBtnEl.addEventListener("click", () => {
-    excelUndo();
-  });
-}
-const redoBtnEl = document.getElementById("excelRedoBtn");
-if (redoBtnEl) {
-  redoBtnEl.addEventListener("click", () => {
-    excelRedo();
-  });
-}
-
-// Global Keyboard shortcuts for Ctrl+Z and Ctrl+Y
-document.addEventListener("keydown", (e) => {
-  if (e.ctrlKey && e.key.toLowerCase() === "z") {
-    const activeEl = document.activeElement;
-    if (activeEl && (activeEl.classList.contains("excel-cell-edit") || activeEl.id === "excelFormulaInput")) {
-      return; 
-    }
-    e.preventDefault();
-    excelUndo();
-  }
-  if (e.ctrlKey && e.key.toLowerCase() === "y") {
-    const activeEl = document.activeElement;
-    if (activeEl && (activeEl.classList.contains("excel-cell-edit") || activeEl.id === "excelFormulaInput")) {
-      return; 
-    }
-    e.preventDefault();
-    excelRedo();
-  }
-});
-
-document.getElementById("excelFormatBold").addEventListener("click", () => {
-  if (!activeCellElement) return;
-  pushExcelState(); // Save state for Undo
-  const isBold = activeCellElement.style.fontWeight === "bold";
-  activeCellElement.style.fontWeight = isBold ? "normal" : "bold";
-  saveCellStyles(activeCellElement.dataset.cell, { bold: !isBold });
-  document.getElementById("excelFormatBold").style.background = !isBold ? "var(--color-primary-start)" : "#444";
-});
-
-document.getElementById("excelFormatItalic").addEventListener("click", () => {
-  if (!activeCellElement) return;
-  pushExcelState(); // Save state for Undo
-  const isItalic = activeCellElement.style.fontStyle === "italic";
-  activeCellElement.style.fontStyle = isItalic ? "normal" : "italic";
-  saveCellStyles(activeCellElement.dataset.cell, { italic: !isItalic });
-  document.getElementById("excelFormatItalic").style.background = !isItalic ? "var(--color-primary-start)" : "#444";
-});
-
-document.getElementById("excelFormatUnderline").addEventListener("click", () => {
-  if (!activeCellElement) return;
-  pushExcelState(); // Save state for Undo
-  const isUnder = activeCellElement.style.textDecoration === "underline";
-  activeCellElement.style.textDecoration = isUnder ? "none" : "underline";
-  saveCellStyles(activeCellElement.dataset.cell, { underline: !isUnder });
-  document.getElementById("excelFormatUnderline").style.background = !isUnder ? "var(--color-primary-start)" : "#444";
-});
-
-document.getElementById("excelBgColor").addEventListener("change", (e) => {
-  if (!activeCellElement) return;
-  pushExcelState(); // Save state for Undo
-  const bg = e.target.value;
-  activeCellElement.style.backgroundColor = bg;
-  saveCellStyles(activeCellElement.dataset.cell, { background: bg });
-});
-
-document.getElementById("excelTextColor").addEventListener("change", (e) => {
-  if (!activeCellElement) return;
-  pushExcelState(); // Save state for Undo
-  const tc = e.target.value;
-  activeCellElement.style.color = tc;
-  saveCellStyles(activeCellElement.dataset.cell, { color: tc });
-});
-
-// Quick Formulas implementation
-document.getElementById("excelFormulaSum").addEventListener("click", () => {
-  if (!activeCellElement) return;
-  activeCellElement.textContent = "=SUM(D1:D10)";
-  activeCellElement.focus();
-});
-
-document.getElementById("excelFormulaAvg").addEventListener("click", () => {
-  if (!activeCellElement) return;
-  activeCellElement.textContent = "=AVERAGE(D1:D10)";
-  activeCellElement.focus();
-});
-
-document.getElementById("excelFormulaMin").addEventListener("click", () => {
-  if (!activeCellElement) return;
-  activeCellElement.textContent = "=MIN(D1:D10)";
-  activeCellElement.focus();
-});
-
-document.getElementById("excelFormulaMax").addEventListener("click", () => {
-  if (!activeCellElement) return;
-  activeCellElement.textContent = "=MAX(D1:D10)";
-  activeCellElement.focus();
-});
-
-const excelAddColumnBtn = document.getElementById("excelAddColumnBtn");
-if (excelAddColumnBtn) {
-  excelAddColumnBtn.addEventListener("click", () => {
-    pushExcelState(); // Save state for Undo
-    const dsSelect = document.getElementById("excelDataSource");
-    const dataSource = dsSelect ? dsSelect.value : "orders";
-    
-    let colsKey = `brakeExcelCols_${dataSource}`;
-    let namesKey = `brakeExcelColNames_${dataSource}`;
-    
-    let cols = JSON.parse(localStorage.getItem(colsKey) || "[]");
-    let colNames = JSON.parse(localStorage.getItem(namesKey) || "{}");
-    
-    const colLabel = prompt(currentLang === 'ru' ? "Введите описание нового столбца (например: Заводская отгрузка):" : "Enter a description for the new column:");
-    if (colLabel === null) return; // cancelled
-    
-    // Determine next letter
-    const lastLetter = cols.length > 0 ? cols[cols.length - 1] : "@";
-    const nextCharCode = lastLetter.charCodeAt(0) + 1;
-    if (nextCharCode > 90) { // beyond 'Z'
-      alert(currentLang === 'ru' ? "Достигнуто максимальное количество столбцов (Z)!" : "Maximum column limit reached (Z)!");
-      return;
-    }
-    const nextLetter = String.fromCharCode(nextCharCode);
-    
-    cols.push(nextLetter);
-    colNames[nextLetter] = colLabel.trim() || `Свободный (${nextLetter})`;
-    
-    localStorage.setItem(colsKey, JSON.stringify(cols));
-    localStorage.setItem(namesKey, JSON.stringify(colNames));
-    
-    renderExcelGrid();
-    showToast(currentLang === 'ru' ? `Столбец ${nextLetter} (${colNames[nextLetter]}) успешно добавлен!` : `Column ${nextLetter} (${colNames[nextLetter]}) successfully added!`);
-  });
-}
-
-if (syncExcelBtn) {
-  syncExcelBtn.addEventListener("click", () => {
-    const activeMfg = getActiveManufacturer();
-    const dsSelect = document.getElementById("excelDataSource");
-    const dataSource = dsSelect ? dsSelect.value : "orders";
-    
-    if (dataSource.startsWith("custom_")) {
-      const customData = {};
-      Object.keys(excelData).forEach(key => {
-        if (/^[A-Z]+\d+$/.test(key)) {
-          customData[key] = excelData[key];
-        }
-      });
-      localStorage.setItem(`brakeExcelData_${dataSource}`, JSON.stringify(customData));
-      showToast(currentLang === 'ru' ? "Лист успешно сохранен в базе данных!" : "Sheet successfully saved in database!");
-      return;
-    }
-
-    if (dataSource === "products") {
-      let counter = 0;
-      const filteredProducts = products.filter(p => {
-        const pMfg = p.manufacturer || "Garage1";
-        if (activeMfg === "all") return true;
-        return pMfg === activeMfg;
-      });
-      
-      // Group products so we match the displayed rows
-      const handledGroups = new Set();
-      const excelProducts = [];
-      filteredProducts.forEach(p => {
-        if (!p.groupId) {
-          excelProducts.push(p);
-        } else {
-          if (!handledGroups.has(p.groupId)) {
-            handledGroups.add(p.groupId);
-            excelProducts.push(p);
-          }
-        }
-      });
-      
-      excelProducts.forEach((p, idx) => {
-        const rowIdx = idx + 1;
-        const productIdStr = excelData[`A${rowIdx}`];
-        if (!productIdStr) return;
-        
-        const pIdx = products.findIndex(x => x.id.toString() === productIdStr);
-        if (pIdx !== -1) {
-          const parent = products[pIdx];
-          parent.name = excelData[`B${rowIdx}`] || parent.name;
-          parent.brand = excelData[`C${rowIdx}`] || parent.brand;
-          parent.manufacturer = excelData[`D${rowIdx}`] || parent.manufacturer;
-          
-          const priceVal = excelData[`E${rowIdx}`];
-          if (priceVal && !priceVal.startsWith("=")) {
-            parent.price = parseFloat(priceVal) || 0;
-          }
-          
-          parent.stock = excelData[`F${rowIdx}`] === "true";
-          parent.visible = excelData[`G${rowIdx}`] === "true";
-          parent.seoTitle = excelData[`H${rowIdx}`] || parent.seoTitle || "";
-          parent.seoDesc = excelData[`I${rowIdx}`] || parent.seoDesc || "";
-          parent.seoKeywords = excelData[`J${rowIdx}`] || parent.seoKeywords || "";
-          
-          // Propagate changes to the entire group
-          if (parent.groupId) {
-            products.forEach(other => {
-              if (other.groupId === parent.groupId && other.id !== parent.id) {
-                other.brand = parent.brand;
-                other.manufacturer = parent.manufacturer;
-                other.price = parent.price;
-                other.stock = parent.stock;
-                other.stockCount = parent.stockCount;
-              }
-            });
-          }
-          counter++;
-        }
-      });
-      
-      localStorage.setItem("brakeProducts", JSON.stringify(products));
-      showToast(`Успешно синхронизировано ${counter} товаров на складе!`);
-      renderTable();
-    } else {
-      const orders = JSON.parse(localStorage.getItem("brakeOrders") || "[]");
-      const syncedOrdersCount = orders.length;
-      let counter = 0;
-      
-      for (let r = 1; r <= syncedOrdersCount; r++) {
-        const orderIdStr = excelData[`A${r}`];
-        if (!orderIdStr) continue;
-        
-        const orderId = Number(orderIdStr);
-        const oIdx = orders.findIndex(x => x.id === orderId);
-        
-        if (oIdx !== -1) {
-          orders[oIdx].customer.name = excelData[`C${r}`] || orders[oIdx].customer.name;
-          
-          const priceVal = excelData[`D${r}`];
-          if (priceVal && !priceVal.startsWith("=")) {
-            orders[oIdx].total = `$${parseFloat(priceVal).toFixed(2)}`;
-          }
-          
-          orders[oIdx].status = excelData[`E${r}`] || orders[oIdx].status;
-          orders[oIdx].customer.address = excelData[`F${r}`] || orders[oIdx].customer.address;
-          orders[oIdx].comment = excelData[`G${r}`] || orders[oIdx].comment;
-          orders[oIdx].preferredContact = excelData[`H${r}`] || orders[oIdx].preferredContact;
-          orders[oIdx].contactValue = excelData[`I${r}`] || orders[oIdx].contactValue;
-          orders[oIdx].shippingCarrier = excelData[`J${r}`] || orders[oIdx].shippingCarrier;
-          orders[oIdx].trackingNumber = excelData[`K${r}`] || orders[oIdx].trackingNumber;
-          counter++;
-        }
-      }
-      
-      localStorage.setItem("brakeOrders", JSON.stringify(orders));
-      showToast(`Успешно синхронизировано ${counter} заказов с базой данных!`);
-      renderOrders();
-    }
+    showToast("Column added!");
   });
 }
 
@@ -3258,7 +1796,7 @@ function loadMfgInfo() {
   const key = `brakeMfgDetails_${manufacturerName || 'Garage1'}`;
   const info = JSON.parse(localStorage.getItem(key) || "{}");
   
-  document.getElementById("mfgWorkload").value = info.workload || "Средняя (3-5 дней)";
+  document.getElementById("mfgWorkload").value = info.workload || "Average (3-5 days)";
   document.getElementById("mfgDescription").value = info.description || "";
   document.getElementById("mfgPhone").value = info.phone || "";
   document.getElementById("mfgAddress").value = info.address || "";
@@ -3276,30 +1814,702 @@ if (mfgInfoForm) {
     
     const key = `brakeMfgDetails_${manufacturerName || 'Garage1'}`;
     localStorage.setItem(key, JSON.stringify({ workload, description, phone, address, materials }));
-    showToast("Профиль производства успешно сохранен!");
+    showToast("Production profile successfully saved!");
   });
 }
 
-// --- Point 15: Superuser Producer Register & Site Settings ---
+// --- Bookkeeping & Estimate System ---
+const orderEstimateModal = document.getElementById("orderEstimateModal");
+const closeOrderEstimateModal = document.getElementById("closeOrderEstimateModal");
+const estimateOrderNum = document.getElementById("estimateOrderNum");
+const estimateMfgName = document.getElementById("estimateMfgName");
+const estimateItemsTableBody = document.getElementById("estimateItemsTableBody");
+const estimateAddItemBtn = document.getElementById("estimateAddItemBtn");
+const estimateSellingPrice = document.getElementById("estimateSellingPrice");
+const estimateTotalProfit = document.getElementById("estimateTotalProfit");
+const orderEstimateForm = document.getElementById("orderEstimateForm");
+const estimateSaveTemplateBtn = document.getElementById("estimateSaveTemplateBtn");
+const estimateLoadTemplateBtn = document.getElementById("estimateLoadTemplateBtn");
+const estimateResetBtn = document.getElementById("estimateResetBtn");
+
+const overallEstimateModal = document.getElementById("overallEstimateModal");
+const closeOverallEstimateModal = document.getElementById("closeOverallEstimateModal");
+const overallEstimateCloseBtn = document.getElementById("overallEstimateCloseBtn");
+const overallTotalRevenue = document.getElementById("overallTotalRevenue");
+const overallTotalExpenses = document.getElementById("overallTotalExpenses");
+const overallTotalProfit = document.getElementById("overallTotalProfit");
+const overallEstimateTableBody = document.getElementById("overallEstimateTableBody");
+const showOverallEstimateBtn = document.getElementById("showOverallEstimateBtn");
+const showOverallEstimateBtn2 = document.getElementById("showOverallEstimateBtn2");
+
+let activeEstimateOrderId = null;
+let activeEstimateMfg = "";
+let currentEstimateItems = []; // Array of { name, value }
+
+const DEFAULT_ESTIMATE_ITEMS = [
+  { name: "Material costs", value: 0 },
+  { name: "Laser cutting costs", value: 0 },
+  { name: "Heat treatment costs", value: 0 },
+  { name: "Transportation costs", value: 0 },
+  { name: "Grinding costs", value: 0 },
+  { name: "Turning works", value: 0 },
+  { name: "Drawing/design costs", value: 0 },
+  { name: "Equipment rental", value: 0 },
+  { name: "Space rental", value: 0 },
+  { name: "Shipping costs", value: 0 },
+  { name: "Tax expenses", value: 0 },
+  { name: "Shop fee", value: 0 }
+];
+
+function getOrderMfgSubtotal(order, mfg) {
+  if (mfg === "all" || !mfg || mfg === "Administration (Superuser)") {
+    return order.total ? Number(order.total.toString().replace(/[^0-9.]/g, '')) : 0;
+  }
+  const mfgItems = order.items.filter(item => {
+    const p = products.find(prod => prod.id == item.id);
+    const pMfg = p ? (p.manufacturer || "Garage1") : "Garage1";
+    return pMfg === mfg;
+  });
+  return mfgItems.reduce((sum, it) => sum + ((it.price || 0) * it.qty), 0);
+}
+
+function openOrderEstimateModal(orderId) {
+  const orders = JSON.parse(localStorage.getItem("brakeOrders") || "[]");
+  const order = orders.find(o => o.id == orderId);
+  if (!order) return;
+  
+  activeEstimateOrderId = orderId;
+  
+  let mfg = getActiveManufacturer();
+  if (mfg === "all") {
+    const firstItem = order.items[0];
+    const p = firstItem ? products.find(prod => prod.id == firstItem.id) : null;
+    mfg = p ? (p.manufacturer || "Garage1") : "Garage1";
+  }
+  activeEstimateMfg = mfg;
+  
+  estimateOrderNum.textContent = `#${order.id.toString().slice(-4)}`;
+  estimateMfgName.textContent = mfg;
+  
+  const savedKey = `brakeOrderEstimate_${orderId}_${mfg}`;
+  const savedEstimate = JSON.parse(localStorage.getItem(savedKey) || "null");
+  
+  if (savedEstimate) {
+    currentEstimateItems = savedEstimate;
+  } else {
+    // Check new multi-template store for a "Default" template
+    const multiStoreKey = `brakeMfgEstimateTemplates_${mfg}`;
+    const multiStore = JSON.parse(localStorage.getItem(multiStoreKey) || "{}");
+    // Also check legacy single-template key
+    const legacyKey = `brakeMfgEstimateTemplate_${mfg}`;
+    const legacyTemplate = JSON.parse(localStorage.getItem(legacyKey) || "null");
+    
+    if (multiStore["Default"]) {
+      currentEstimateItems = JSON.parse(JSON.stringify(multiStore["Default"]));
+    } else if (legacyTemplate) {
+      currentEstimateItems = JSON.parse(JSON.stringify(legacyTemplate));
+    } else {
+      currentEstimateItems = JSON.parse(JSON.stringify(DEFAULT_ESTIMATE_ITEMS));
+    }
+  }
+  
+  const sellingPriceValue = getOrderMfgSubtotal(order, mfg);
+  estimateSellingPrice.value = sellingPriceValue.toFixed(2);
+  
+  renderEstimateItems();
+  populateTemplateDropdown();
+  if (orderEstimateModal) orderEstimateModal.style.display = "flex";
+}
+
+function renderEstimateItems() {
+  if (!estimateItemsTableBody) return;
+  
+  estimateItemsTableBody.innerHTML = "";
+  currentEstimateItems.forEach((item, index) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>
+        <input type="text" class="estimate-item-name" data-index="${index}" value="${item.name}" style="width:100%; padding:0.4rem; background:transparent; border:1px solid var(--color-border); color:var(--color-text-bright); border-radius:4px; box-sizing:border-box;" />
+      </td>
+      <td>
+        <input type="number" step="0.01" class="estimate-item-value" data-index="${index}" value="${item.value || 0}" style="width:100%; padding:0.4rem; background:transparent; border:1px solid var(--color-border); color:var(--color-text-bright); border-radius:4px; box-sizing:border-box;" />
+      </td>
+      <td style="text-align:center;">
+        <button type="button" class="estimate-item-del-btn" data-index="${index}" style="background:none; border:none; color:#ff5252; cursor:pointer; font-size:1.1rem; padding:0;">🗑️</button>
+      </td>
+    `;
+    
+    tr.querySelector(".estimate-item-name").addEventListener("input", (e) => {
+      currentEstimateItems[index].name = e.target.value;
+    });
+    
+    tr.querySelector(".estimate-item-value").addEventListener("input", (e) => {
+      currentEstimateItems[index].value = parseFloat(e.target.value) || 0;
+      calculateEstimateTotals();
+    });
+    
+    tr.querySelector(".estimate-item-del-btn").addEventListener("click", () => {
+      currentEstimateItems.splice(index, 1);
+      renderEstimateItems();
+    });
+    
+    estimateItemsTableBody.appendChild(tr);
+  });
+  
+  calculateEstimateTotals();
+}
+
+function calculateEstimateTotals() {
+  const sellingPrice = parseFloat(estimateSellingPrice.value) || 0;
+  const totalExpenses = currentEstimateItems.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
+  const netProfit = sellingPrice - totalExpenses;
+  
+  estimateTotalProfit.value = `$${netProfit.toFixed(2)}`;
+  if (netProfit >= 0) {
+    estimateTotalProfit.style.color = "#00e676";
+  } else {
+    estimateTotalProfit.style.color = "#ff5252";
+  }
+}
+
+if (closeOrderEstimateModal) {
+  closeOrderEstimateModal.addEventListener("click", () => {
+    if (orderEstimateModal) orderEstimateModal.style.display = "none";
+  });
+}
+
+if (estimateAddItemBtn) {
+  estimateAddItemBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    currentEstimateItems.push({ name: "Custom expense", value: 0 });
+    renderEstimateItems();
+    // Auto-scroll to bottom of items list
+    const container = estimateItemsTableBody?.closest("div");
+    if (container) setTimeout(() => container.scrollTop = container.scrollHeight, 50);
+  });
+}
+
+if (estimateResetBtn) {
+  estimateResetBtn.addEventListener("click", () => {
+    if (confirm("Reset estimate to default items?")) {
+      currentEstimateItems = JSON.parse(JSON.stringify(DEFAULT_ESTIMATE_ITEMS));
+      renderEstimateItems();
+    }
+  });
+}
+
+// --- Multi-template system ---
+const estimateTemplateSelect = document.getElementById("estimateTemplateSelect");
+const estimateTemplateNameInput = document.getElementById("estimateTemplateNameInput");
+const estimateDeleteTemplateBtn = document.getElementById("estimateDeleteTemplateBtn");
+
+function getTemplatesStore(mfg) {
+  const key = `brakeMfgEstimateTemplates_${mfg}`;
+  return JSON.parse(localStorage.getItem(key) || "{}");
+}
+
+function saveTemplatesStore(mfg, store) {
+  const key = `brakeMfgEstimateTemplates_${mfg}`;
+  localStorage.setItem(key, JSON.stringify(store));
+}
+
+// Migrate old single-template format to new multi-template store
+function migrateOldTemplate(mfg) {
+  const oldKey = `brakeMfgEstimateTemplate_${mfg}`;
+  const oldTemplate = JSON.parse(localStorage.getItem(oldKey) || "null");
+  if (oldTemplate) {
+    const store = getTemplatesStore(mfg);
+    if (!store["Default"]) {
+      store["Default"] = oldTemplate;
+      saveTemplatesStore(mfg, store);
+    }
+    localStorage.removeItem(oldKey);
+  }
+}
+
+function populateTemplateDropdown() {
+  if (!estimateTemplateSelect || !activeEstimateMfg) return;
+  migrateOldTemplate(activeEstimateMfg);
+  const store = getTemplatesStore(activeEstimateMfg);
+  const names = Object.keys(store).sort();
+
+  estimateTemplateSelect.innerHTML = '<option value="">— Select Template —</option>';
+  names.forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    estimateTemplateSelect.appendChild(opt);
+  });
+}
+
+if (estimateTemplateNameInput) {
+  estimateTemplateNameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (estimateSaveTemplateBtn) estimateSaveTemplateBtn.click();
+    }
+  });
+}
+
+if (estimateSaveTemplateBtn) {
+  estimateSaveTemplateBtn.addEventListener("click", () => {
+    if (!activeEstimateMfg) return;
+    const nameInput = estimateTemplateNameInput;
+    let name = nameInput ? nameInput.value.trim() : "";
+    if (!name) {
+      name = prompt("Enter a name for this template:");
+      if (!name || !name.trim()) return;
+      name = name.trim();
+    }
+
+    const store = getTemplatesStore(activeEstimateMfg);
+    const exists = !!store[name];
+    if (exists && !confirm(`Template "${name}" already exists. Overwrite?`)) return;
+
+    store[name] = JSON.parse(JSON.stringify(currentEstimateItems));
+    saveTemplatesStore(activeEstimateMfg, store);
+
+    if (nameInput) nameInput.value = "";
+    populateTemplateDropdown();
+    if (estimateTemplateSelect) estimateTemplateSelect.value = name;
+    showToast(`Template "${name}" saved for ${activeEstimateMfg}!`);
+  });
+}
+
+if (estimateLoadTemplateBtn) {
+  estimateLoadTemplateBtn.addEventListener("click", () => {
+    if (!activeEstimateMfg || !estimateTemplateSelect) return;
+    const name = estimateTemplateSelect.value;
+    if (!name) {
+      showToast("Select a template from the dropdown first.", false);
+      return;
+    }
+    const store = getTemplatesStore(activeEstimateMfg);
+    const template = store[name];
+    if (template) {
+      currentEstimateItems = JSON.parse(JSON.stringify(template));
+      renderEstimateItems();
+      showToast(`Template "${name}" loaded!`);
+    } else {
+      showToast("Template not found.", false);
+    }
+  });
+}
+
+if (estimateDeleteTemplateBtn) {
+  estimateDeleteTemplateBtn.addEventListener("click", () => {
+    if (!activeEstimateMfg || !estimateTemplateSelect) return;
+    const name = estimateTemplateSelect.value;
+    if (!name) {
+      showToast("Select a template to delete.", false);
+      return;
+    }
+    if (!confirm(`Delete template "${name}"?`)) return;
+    const store = getTemplatesStore(activeEstimateMfg);
+    delete store[name];
+    saveTemplatesStore(activeEstimateMfg, store);
+    populateTemplateDropdown();
+    showToast(`Template "${name}" deleted.`);
+  });
+}
+
+if (orderEstimateForm) {
+  orderEstimateForm.addEventListener("keydown", (e) => {
+    // Prevent Enter from submitting the form, unless focused on a button
+    if (e.key === "Enter" && e.target.tagName !== "BUTTON") {
+      e.preventDefault();
+    }
+  });
+
+  orderEstimateForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!activeEstimateOrderId || !activeEstimateMfg) return;
+    
+    const savedKey = `brakeOrderEstimate_${activeEstimateOrderId}_${activeEstimateMfg}`;
+    localStorage.setItem(savedKey, JSON.stringify(currentEstimateItems));
+    
+    const overallKey = `brakeOrderEstimateSummary_${activeEstimateOrderId}_${activeEstimateMfg}`;
+    const sellingPrice = parseFloat(estimateSellingPrice.value) || 0;
+    const totalExpenses = currentEstimateItems.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
+    const netProfit = sellingPrice - totalExpenses;
+    
+    localStorage.setItem(overallKey, JSON.stringify({
+      orderId: activeEstimateOrderId,
+      mfg: activeEstimateMfg,
+      sellingPrice,
+      totalExpenses,
+      netProfit,
+      breakdown: currentEstimateItems
+    }));
+    
+    const orders = JSON.parse(localStorage.getItem("brakeOrders") || "[]");
+    const targetOrder = orders.find(o => o.id == activeEstimateOrderId);
+    if (targetOrder) {
+      postOrderToAccounting(targetOrder, activeEstimateMfg);
+    }
+    
+    if (orderEstimateModal) orderEstimateModal.style.display = "none";
+    showToast("Order estimate saved successfully!");
+  });
+}
+
+function openOverallEstimateModal() {
+  const orders = JSON.parse(localStorage.getItem("brakeOrders") || "[]");
+  const activeMfg = getActiveManufacturer();
+  
+  let filteredOrders = orders.filter(o => {
+    if (activeMfg === "all") return true;
+    return o.items.some(item => {
+      const p = products.find(prod => prod.id == item.id);
+      const pMfg = p ? (p.manufacturer || "Garage1") : "Garage1";
+      return pMfg === activeMfg;
+    });
+  });
+  
+  if (!overallEstimateTableBody) return;
+  overallEstimateTableBody.innerHTML = "";
+  
+  let sumRevenue = 0;
+  let sumExpenses = 0;
+  let sumProfit = 0;
+  
+  filteredOrders.forEach(o => {
+    let mfg = activeMfg;
+    if (mfg === "all") {
+      const firstItem = o.items[0];
+      const p = firstItem ? products.find(prod => prod.id == firstItem.id) : null;
+      mfg = p ? (p.manufacturer || "Garage1") : "Garage1";
+    }
+    
+    const sellingPrice = getOrderMfgSubtotal(o, mfg);
+    
+    const summaryKey = `brakeOrderEstimateSummary_${o.id}_${mfg}`;
+    let summary = JSON.parse(localStorage.getItem(summaryKey) || "null");
+    
+    if (!summary) {
+      const templateKey = `brakeMfgEstimateTemplate_${mfg}`;
+      const mfgTemplate = JSON.parse(localStorage.getItem(templateKey) || "null");
+      const currentItems = mfgTemplate || DEFAULT_ESTIMATE_ITEMS;
+      const totalExpenses = currentItems.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
+      const netProfit = sellingPrice - totalExpenses;
+      
+      summary = {
+        sellingPrice,
+        totalExpenses,
+        netProfit,
+        breakdown: currentItems
+      };
+    }
+    
+    sumRevenue += summary.sellingPrice;
+    sumExpenses += summary.totalExpenses;
+    sumProfit += summary.netProfit;
+    
+    const breakdownText = summary.breakdown
+      .filter(item => (item.value || 0) > 0)
+      .map(item => `${item.name}: $${parseFloat(item.value).toFixed(2)}`)
+      .join("<br/>") || '<span style="color:var(--color-muted);">No expenses</span>';
+      
+    const tr = document.createElement("tr");
+    const productNames = (o.items || []).map(item => `${item.name} (x${item.qty})`).join("<br/>") || '<span style="color:var(--color-muted);">No products</span>';
+    tr.innerHTML = `
+      <td style="font-weight:bold; color:var(--color-text-bright);">
+        <button class="recon-order-btn" data-id="${o.id}" style="background:none; border:none; color:var(--color-primary-start); cursor:pointer; text-decoration:underline; font-weight:bold; padding:0; font-size:inherit; font-family:inherit;">#${o.id.toString().slice(-4)}</button>
+      </td>
+      <td>${new Date(o.date).toLocaleDateString()}</td>
+      <td style="color:var(--color-muted); font-size:0.85rem; max-width:200px; white-space:normal; word-break:break-word;">${productNames}</td>
+      <td style="color:#00e676; font-weight:bold;">$${summary.sellingPrice.toFixed(2)}</td>
+      <td style="color:#ff5252;">$${summary.totalExpenses.toFixed(2)}</td>
+      <td style="font-weight:bold; color:${summary.netProfit >= 0 ? '#00e676' : '#ff5252'};">$${summary.netProfit.toFixed(2)}</td>
+      <td style="font-size:0.8rem; line-height:1.4; color:var(--color-muted);">${breakdownText}</td>
+    `;
+    overallEstimateTableBody.appendChild(tr);
+  });
+  
+  // Attach click listeners to view details of reconciliation orders
+  overallEstimateTableBody.querySelectorAll(".recon-order-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      openOrderDetails(btn.dataset.id);
+    });
+  });
+  
+  overallTotalRevenue.textContent = `$${sumRevenue.toFixed(2)}`;
+  overallTotalExpenses.textContent = `$${sumExpenses.toFixed(2)}`;
+  overallTotalProfit.textContent = `$${sumProfit.toFixed(2)}`;
+  overallTotalProfit.style.color = sumProfit >= 0 ? "#00e676" : "#ff5252";
+  
+  if (overallEstimateModal) overallEstimateModal.style.display = "flex";
+}
+
+if (closeOverallEstimateModal) {
+  closeOverallEstimateModal.addEventListener("click", () => {
+    if (overallEstimateModal) overallEstimateModal.style.display = "none";
+  });
+}
+
+if (overallEstimateCloseBtn) {
+  overallEstimateCloseBtn.addEventListener("click", () => {
+    if (overallEstimateModal) overallEstimateModal.style.display = "none";
+  });
+}
+
+if (showOverallEstimateBtn) {
+  showOverallEstimateBtn.addEventListener("click", openOverallEstimateModal);
+}
+
+if (showOverallEstimateBtn2) {
+  showOverallEstimateBtn2.addEventListener("click", openOverallEstimateModal);
+}
+
+// --- Point 15: Superuser Producer/User Register & Site Settings ---
 const producersTableBody = document.getElementById("producersTableBody");
+const usersTableBody = document.getElementById("usersTableBody");
 const openAddProducerModalBtn = document.getElementById("openAddProducerModalBtn");
+const openAddUserModalBtn = document.getElementById("openAddUserModalBtn");
 const addProducerModal = document.getElementById("addProducerModal");
+const addUserModal = document.getElementById("addUserModal");
 const addProducerForm = document.getElementById("addProducerForm");
+const addUserForm = document.getElementById("addUserForm");
 const closeProducerModal = document.getElementById("closeProducerModal");
+const closeUserModal = document.getElementById("closeUserModal");
+
+const subTabProducersBtn = document.getElementById("subTabProducersBtn");
+const subTabUsersBtn = document.getElementById("subTabUsersBtn");
+const subTabProducersContent = document.getElementById("subTabProducersContent");
+const subTabUsersContent = document.getElementById("subTabUsersContent");
+
+if (subTabProducersBtn && subTabUsersBtn) {
+  subTabProducersBtn.addEventListener("click", () => {
+    subTabProducersBtn.style.background = "var(--color-primary-start)";
+    subTabProducersBtn.style.color = "#fff";
+    subTabUsersBtn.style.background = "#222";
+    subTabUsersBtn.style.color = "#aaa";
+    if (subTabProducersContent) subTabProducersContent.style.display = "block";
+    if (subTabUsersContent) subTabUsersContent.style.display = "none";
+  });
+
+  subTabUsersBtn.addEventListener("click", () => {
+    subTabUsersBtn.style.background = "#7c3aed";
+    subTabUsersBtn.style.color = "#fff";
+    subTabProducersBtn.style.background = "#222";
+    subTabProducersBtn.style.color = "#aaa";
+    if (subTabProducersContent) subTabProducersContent.style.display = "none";
+    if (subTabUsersContent) subTabUsersContent.style.display = "block";
+  });
+}
+
+const editUserModal = document.getElementById("editUserModal");
+const editUserForm = document.getElementById("editUserForm");
+const editUserOriginalUsername = document.getElementById("editUserOriginalUsername");
+const editUserUsernameInput = document.getElementById("editUserUsername");
+const editUserPasswordInput = document.getElementById("editUserPassword");
+const editUserMfgContainer = document.getElementById("editUserMfgContainer");
+const editUserMfgNameInput = document.getElementById("editUserMfgName");
+const closeEditUserModal = document.getElementById("closeEditUserModal");
 
 function loadProducers() {
-  if (!producersTableBody) return;
   const allUsers = JSON.parse(localStorage.getItem("brakeUsers") || "[]");
-  const producers = allUsers.filter(u => u.role === 'admin');
   
-  producersTableBody.innerHTML = producers.map(p => `
-    <tr>
-      <td style="font-weight:bold; color:#fff;">👤 ${p.username}</td>
-      <td>🏭 ${p.manufacturer}</td>
-      <td><code>${p.password}</code></td>
-      <td><span class="stock-badge in-stock" style="background:#2e7d32; color:#fff;">PRODUCER</span></td>
-    </tr>
-  `).join('');
+  if (producersTableBody) {
+    const producers = allUsers.filter(u => u.role === 'admin');
+    producersTableBody.innerHTML = producers.map(p => {
+      const isBlocked = p.blocked || false;
+      const blockBtnText = isBlocked ? "🔓 Unblock" : "🔒 Block";
+      const blockBtnColor = isBlocked ? "#4caf50" : "#ff9800";
+      const blockBadge = isBlocked ? ` <span style="background:#ff3d00; color:var(--color-text-bright); font-size:0.75rem; padding:0.1rem 0.3rem; border-radius:3px; margin-left:0.5rem;">BLOCKED</span>` : '';
+      
+      return `
+        <tr>
+          <td style="font-weight:bold; color:var(--color-text-bright);">👤 ${p.username}${blockBadge}</td>
+          <td>🏭 ${p.manufacturer}</td>
+          <td><code>${p.password}</code></td>
+          <td><span class="stock-badge in-stock" style="background:#2e7d32; color:var(--color-text-bright);">PRODUCER</span></td>
+          <td>
+            <div style="display:flex; gap:0.5rem;">
+              <button class="brand-btn edit-account-btn" data-username="${p.username}" style="padding:0.3rem 0.6rem; font-size:0.8rem; background:#00b0ff; border:none; color:#fff; cursor:pointer;">Edit</button>
+              <button class="brand-btn block-account-btn" data-username="${p.username}" data-blocked="${isBlocked}" style="padding:0.3rem 0.6rem; font-size:0.8rem; background:${blockBtnColor}; border:none; color:var(--color-text-bright); cursor:pointer;">${blockBtnText}</button>
+              <button class="brand-btn delete-account-btn" data-username="${p.username}" style="padding:0.3rem 0.6rem; font-size:0.8rem; background:#ff5252; border:none; color:#fff; cursor:pointer;">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+  
+  if (usersTableBody) {
+    const clients = allUsers.filter(u => u.role === 'user' || !u.role);
+    usersTableBody.innerHTML = clients.map(u => {
+      const isBlocked = u.blocked || false;
+      const blockBtnText = isBlocked ? "🔓 Unblock" : "🔒 Block";
+      const blockBtnColor = isBlocked ? "#4caf50" : "#ff9800";
+      const blockBadge = isBlocked ? ` <span style="background:#ff3d00; color:var(--color-text-bright); font-size:0.75rem; padding:0.1rem 0.3rem; border-radius:3px; margin-left:0.5rem;">BLOCKED</span>` : '';
+      
+      return `
+        <tr>
+          <td style="font-weight:bold; color:var(--color-text-bright);">👤 ${u.username}${blockBadge}</td>
+          <td><code>${u.password}</code></td>
+          <td><span class="stock-badge in-stock" style="background:#7c3aed; color:var(--color-text-bright);">CLIENT</span></td>
+          <td>
+            <div style="display:flex; gap:0.5rem;">
+              <button class="brand-btn edit-account-btn" data-username="${u.username}" style="padding:0.3rem 0.6rem; font-size:0.8rem; background:#00b0ff; border:none; color:#fff; cursor:pointer;">Edit</button>
+              <button class="brand-btn block-account-btn" data-username="${u.username}" data-blocked="${isBlocked}" style="padding:0.3rem 0.6rem; font-size:0.8rem; background:${blockBtnColor}; border:none; color:var(--color-text-bright); cursor:pointer;">${blockBtnText}</button>
+              <button class="brand-btn delete-account-btn" data-username="${u.username}" style="padding:0.3rem 0.6rem; font-size:0.8rem; background:#ff5252; border:none; color:#fff; cursor:pointer;">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+  
+  attachAccountActionListeners();
+}
+
+function attachAccountActionListeners() {
+  document.querySelectorAll(".edit-account-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const username = btn.dataset.username;
+      openEditAccountModal(username);
+    });
+  });
+  
+  document.querySelectorAll(".block-account-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const username = btn.dataset.username;
+      const isBlocked = btn.dataset.blocked === "true";
+      toggleBlockAccount(username, isBlocked);
+    });
+  });
+  
+  document.querySelectorAll(".delete-account-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const username = btn.dataset.username;
+      deleteAccount(username);
+    });
+  });
+}
+
+function openEditAccountModal(username) {
+  const allUsers = JSON.parse(localStorage.getItem("brakeUsers") || "[]");
+  const user = allUsers.find(u => u.username === username);
+  if (!user) return;
+  
+  editUserOriginalUsername.value = username;
+  editUserUsernameInput.value = user.username;
+  editUserPasswordInput.value = user.password;
+  
+  if (user.role === 'admin') {
+    editUserMfgContainer.style.display = "flex";
+    editUserMfgNameInput.value = user.manufacturer || "";
+    editUserMfgNameInput.required = true;
+  } else {
+    editUserMfgContainer.style.display = "none";
+    editUserMfgNameInput.value = "";
+    editUserMfgNameInput.required = false;
+  }
+  
+  if (editUserModal) editUserModal.style.display = "flex";
+}
+
+if (closeEditUserModal) {
+  closeEditUserModal.addEventListener("click", () => {
+    if (editUserModal) editUserModal.style.display = "none";
+  });
+}
+
+function toggleBlockAccount(username, currentBlocked) {
+  const currentUser = JSON.parse(localStorage.getItem("brakeUser") || "{}");
+  if (username === currentUser.username) {
+    alert("You cannot block your own administrator account!");
+    return;
+  }
+  
+  const allUsers = JSON.parse(localStorage.getItem("brakeUsers") || "[]");
+  const user = allUsers.find(u => u.username === username);
+  if (!user) return;
+  
+  if (user.role === 'superadmin') {
+    alert("You cannot block a superadmin account!");
+    return;
+  }
+  
+  user.blocked = !currentBlocked;
+  localStorage.setItem("brakeUsers", JSON.stringify(allUsers));
+  
+  loadProducers();
+  showToast(`Account for ${username} has been successfully ${user.blocked ? 'blocked' : 'unblocked'}!`);
+}
+
+function deleteAccount(username) {
+  const currentUser = JSON.parse(localStorage.getItem("brakeUser") || "{}");
+  if (username === currentUser.username) {
+    alert("You cannot delete your own administrator account!");
+    return;
+  }
+  
+  const allUsers = JSON.parse(localStorage.getItem("brakeUsers") || "[]");
+  const userIndex = allUsers.findIndex(u => u.username === username);
+  if (userIndex === -1) return;
+  
+  const user = allUsers[userIndex];
+  if (user.role === 'superadmin') {
+    alert("You cannot delete a superadmin account!");
+    return;
+  }
+  
+  if (!confirm(`Are you sure you want to permanently delete the account for "${username}"? This action cannot be undone.`)) {
+    return;
+  }
+  
+  allUsers.splice(userIndex, 1);
+  localStorage.setItem("brakeUsers", JSON.stringify(allUsers));
+  
+  loadProducers();
+  showToast(`Account for ${username} has been deleted.`);
+}
+
+if (editUserForm) {
+  editUserForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const originalUsername = editUserOriginalUsername.value;
+    const newUsername = editUserUsernameInput.value.trim().toLowerCase();
+    const newPassword = editUserPasswordInput.value.trim();
+    const newMfgName = editUserMfgNameInput.value.trim();
+    
+    if (!newUsername || !newPassword) return;
+    
+    const allUsers = JSON.parse(localStorage.getItem("brakeUsers") || "[]");
+    
+    if (newUsername !== originalUsername) {
+      const exists = allUsers.find(u => u.username === newUsername);
+      if (exists) {
+        alert("A user with this login name already exists!");
+        return;
+      }
+    }
+    
+    const user = allUsers.find(u => u.username === originalUsername);
+    if (!user) return;
+    
+    user.username = newUsername;
+    user.password = newPassword;
+    if (user.role === 'admin') {
+      user.manufacturer = newMfgName;
+    }
+    
+    localStorage.setItem("brakeUsers", JSON.stringify(allUsers));
+    
+    const currentUser = JSON.parse(localStorage.getItem("brakeUser") || "{}");
+    if (originalUsername === currentUser.username) {
+      localStorage.setItem("brakeUser", JSON.stringify(user));
+      location.reload();
+      return;
+    }
+    
+    loadProducers();
+    if (editUserModal) editUserModal.style.display = "none";
+    showToast("Account successfully updated!");
+  });
 }
 
 if (openAddProducerModalBtn) {
@@ -3312,6 +2522,19 @@ if (openAddProducerModalBtn) {
 if (closeProducerModal) {
   closeProducerModal.addEventListener("click", () => {
     addProducerModal.style.display = "none";
+  });
+}
+
+if (openAddUserModalBtn) {
+  openAddUserModalBtn.addEventListener("click", () => {
+    addUserForm.reset();
+    addUserModal.style.display = "flex";
+  });
+}
+
+if (closeUserModal) {
+  closeUserModal.addEventListener("click", () => {
+    addUserModal.style.display = "none";
   });
 }
 
@@ -3328,7 +2551,7 @@ if (addProducerForm) {
     const exists = allUsers.find(u => u.username === username);
     
     if (exists) {
-      alert("Пользователь с таким именем уже существует!");
+      alert("User with this name already exists!");
       return;
     }
     
@@ -3337,75 +2560,170 @@ if (addProducerForm) {
     
     loadProducers();
     addProducerModal.style.display = "none";
-    showToast("Новый производитель успешно добавлен!");
+    showToast("New manufacturer successfully added!");
   });
 }
 
+if (addUserForm) {
+  addUserForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const username = document.getElementById("userRegUsername").value.trim().toLowerCase();
+    const password = document.getElementById("userRegPassword").value.trim();
+    
+    if(!username || !password) return;
+    
+    const allUsers = JSON.parse(localStorage.getItem("brakeUsers") || "[]");
+    const exists = allUsers.find(u => u.username === username);
+    
+    if (exists) {
+      alert("User with this name already exists!");
+      return;
+    }
+    
+    allUsers.push({ username, password, role: 'user', manufacturer: '' });
+    localStorage.setItem("brakeUsers", JSON.stringify(allUsers));
+    
+    loadProducers();
+    addUserModal.style.display = "none";
+    showToast("New client user successfully added!");
+  });
+}
+
+
+
+// Superuser Site Articles and foot Settings saving
 // Superuser Site Articles and foot Settings saving
 const siteSettingsForm = document.getElementById("siteSettingsForm");
 function loadSiteSettings() {
   if (!siteSettingsForm) return;
   const settings = JSON.parse(localStorage.getItem("brakeSiteSettings") || "{}");
-  document.getElementById("setContactEmail").value = settings.contactEmail || "support@brakediscs.com";
   
-  const defaultArticles = [
-    { id: 1, title_ru: "Выбор тормозных дисков", title_en: "Choosing Brake Discs", content_ru: "Как выбрать тормозные диски для мотоцикла. Опирайтесь на диаметр, состав сплава и толщину диска.", content_en: "Brake disc selection guide. Take into account diameter, metallurgical alloy and total thickness." },
-    { id: 2, title_ru: "Правильная обкатка тормозов", title_en: "Brake Break-In Guide", content_ru: "Первые 100 км избегайте резких и затяжных торможений, чтобы колодки равномерно притерлись.", content_en: "Brake breaking-in instructions. Avoid heavy brake cycles during the first 100 km for optimal brake alignment." }
-  ];
-  const articles = JSON.parse(localStorage.getItem("brakeArticles") || JSON.stringify(defaultArticles));
+  // Load General Settings
+  const safeGet = (id, val) => { const el = document.getElementById(id); if (el) { if (el.type === 'checkbox') el.checked = val; else el.value = val || ""; } };
   
-  document.getElementById("art1TitleRu").value = articles[0]?.title_ru || "";
-  document.getElementById("art1TitleEn").value = articles[0]?.title_en || "";
-  document.getElementById("art1ContentRu").value = articles[0]?.content_ru || "";
-  document.getElementById("art1ContentEn").value = articles[0]?.content_en || "";
+  safeGet("setPlatformName", settings.platformName || "Brake Discs Store");
+  safeGet("setContactEmail", settings.contactEmail || "support@brakediscs.com");
+  safeGet("setContactPhone", settings.contactPhone || "+1 234 567 8900");
+  safeGet("setMaintenanceMode", settings.maintenanceMode || false);
   
-  document.getElementById("art2TitleRu").value = articles[1]?.title_ru || "";
-  document.getElementById("art2TitleEn").value = articles[1]?.title_en || "";
-  document.getElementById("art2ContentRu").value = articles[1]?.content_ru || "";
-  document.getElementById("art2ContentEn").value = articles[1]?.content_en || "";
+  // Commission Settings
+  safeGet("setCommissionEnabled", settings.commissionEnabled ?? false);
+  safeGet("setCommissionPercent", settings.commissionPercent ?? 5.0);
+  safeGet("setCommissionPeriod", settings.commissionPeriod || "monthly");
+  
+  // SEO & Social Settings
+  safeGet("setMetaDescription", settings.metaDescription || "");
+  safeGet("setSocialTelegram", settings.socialTelegram || "");
+  safeGet("setSocialWhatsApp", settings.socialWhatsApp || "");
+  safeGet("setSocialInstagram", settings.socialInstagram || "");
+
 }
 
 if (siteSettingsForm) {
   siteSettingsForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    const contactEmail = document.getElementById("setContactEmail").value.trim();
-    localStorage.setItem("brakeSiteSettings", JSON.stringify({ contactEmail }));
+    const safeVal = (id) => { const el = document.getElementById(id); return el ? (el.type === 'checkbox' ? el.checked : el.value.trim()) : undefined; };
     
-    const articles = [
-      {
-        id: 1,
-        title_ru: document.getElementById("art1TitleRu").value.trim(),
-        title_en: document.getElementById("art1TitleEn").value.trim(),
-        content_ru: document.getElementById("art1ContentRu").value.trim(),
-        content_en: document.getElementById("art1ContentEn").value.trim()
-      },
-      {
-        id: 2,
-        title_ru: document.getElementById("art2TitleRu").value.trim(),
-        title_en: document.getElementById("art2TitleEn").value.trim(),
-        content_ru: document.getElementById("art2ContentRu").value.trim(),
-        content_en: document.getElementById("art2ContentEn").value.trim()
-      }
-    ];
-    localStorage.setItem("brakeArticles", JSON.stringify(articles));
-    showToast("Настройки сайта успешно сохранены!");
+    localStorage.setItem("brakeSiteSettings", JSON.stringify({ 
+      platformName: safeVal("setPlatformName"),
+      contactEmail: safeVal("setContactEmail"),
+      contactPhone: safeVal("setContactPhone"),
+      maintenanceMode: safeVal("setMaintenanceMode"),
+      commissionEnabled: safeVal("setCommissionEnabled"),
+      commissionPercent: parseFloat(safeVal("setCommissionPercent")) || 0,
+      commissionPeriod: safeVal("setCommissionPeriod"),
+      metaDescription: safeVal("setMetaDescription"),
+      socialTelegram: safeVal("setSocialTelegram"),
+      socialWhatsApp: safeVal("setSocialWhatsApp"),
+      socialInstagram: safeVal("setSocialInstagram")
+    }));
+    showToast("Site settings successfully saved!");
   });
 }
 
-// Initialise Admin dashboard
-if (userRole === "admin" || userRole === "superadmin") {
-  initSuperadmin();
-  if (userRole === "admin" && showMfgInfoBtn) {
-    showMfgInfoBtn.style.display = "block";
-  }
-  loadProducts();
+function initUserMenu() {
+  const userMenuBtn = document.getElementById("userMenuBtn");
+  const userDropdown = document.getElementById("userDropdown");
+  const userMenuText = document.getElementById("userMenuText");
+  const userInfo = document.getElementById("userInfo");
+  const logoutBtn = document.getElementById("logoutBtn");
   
-  const urlParams = new URLSearchParams(window.location.search);
-  const initialTab = urlParams.get("tab") || "products";
-  switchTab(initialTab);
-} else {
-  window.location.href = "index.html";
+  const navArticles = document.getElementById("navArticles");
+  const navUsers = document.getElementById("navUsers");
+  const navSettings = document.getElementById("navSettings");
+  const accountNav = document.getElementById("accountNav");
+  const adminNav = document.getElementById("adminNav");
+
+  if (!userMenuBtn || !userDropdown) return;
+
+  // Set hello username text
+  if (currentUser && currentUser.username) {
+    if (userMenuText) userMenuText.textContent = currentUser.username;
+    if (userInfo) {
+      userInfo.textContent = `Hello, ${currentUser.username}`;
+      userInfo.style.display = "block";
+    }
+  }
+
+  // Toggle dropdown
+  userMenuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isDisp = userDropdown.style.display === "flex";
+    userDropdown.style.display = isDisp ? "none" : "flex";
+  });
+
+  // Hide dropdown on click outside
+  document.addEventListener("click", () => {
+    userDropdown.style.display = "none";
+  });
+
+  // Logout button
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      localStorage.removeItem("brakeUser");
+      localStorage.removeItem("brakeRole");
+      window.location.href = "index.html";
+    });
+    logoutBtn.style.display = "block";
+  }
+
+  // Set menu visibility based on role
+  if (userRole === "superadmin") {
+    if (navArticles) navArticles.style.display = "block";
+    if (navUsers) navUsers.style.display = "block";
+    if (navSettings) navSettings.style.display = "block";
+    if (accountNav) accountNav.style.display = "block";
+    if (adminNav) adminNav.style.display = "block";
+  } else if (userRole === "admin") {
+    if (navArticles) navArticles.style.display = "block";
+    if (accountNav) accountNav.style.display = "block";
+    if (adminNav) adminNav.style.display = "block";
+    if (navUsers) navUsers.style.display = "none";
+    if (navSettings) navSettings.style.display = "none";
+  }
 }
+
+// Initialise Admin dashboard
+serverSyncReady.then(() => {
+  if (userRole === "admin" || userRole === "superadmin") {
+    try { initUserMenu(); } catch (e) { console.error("Failed to initialize user menu:", e); }
+    try { initSuperadmin(); } catch (e) { console.error("Failed to initialize superadmin panel:", e); }
+    try { initAccounting(showToast); } catch (e) { console.error("Failed to initialize accounting engine:", e); }
+    loadProducts();
+    
+    const currentPath = window.location.pathname;
+    let defaultTab = "products";
+    if (currentPath.includes("articles.html")) defaultTab = "articles";
+    else if (currentPath.includes("users.html")) defaultTab = "producers";
+    else if (currentPath.includes("settings.html")) defaultTab = "settings";
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialTab = urlParams.get("tab") || defaultTab;
+    switchTab(initialTab);
+  } else {
+    window.location.href = "index.html";
+  }
+});
 
 // --- Dynamic AI Analytics & Charts System ---
 function renderAiAnalytics() {
@@ -3442,7 +2760,7 @@ function renderAiAnalytics() {
   const revenueValues = Object.values(revenueMap);
   
   if (revenueKeys.length === 0) {
-    salesChart.innerHTML = `<div style="margin:auto; color:#aaa; font-size:0.85rem;">Нет данных о продажах</div>`;
+    salesChart.innerHTML = `<div style="margin:auto; color:var(--color-muted); font-size:0.85rem;">No sales data</div>`;
   } else {
     const maxRevenue = Math.max(...revenueValues, 1);
     const colors = ["#ff5500", "#00b0ff", "#00e676", "#ffb300", "#d500f9", "#ff4081"];
@@ -3465,7 +2783,7 @@ function renderAiAnalytics() {
       bar.title = `${key}: $${val.toFixed(2)}`;
       
       bar.innerHTML = `
-        <div style="font-size:0.75rem; font-weight:bold; color:#fff; margin-bottom:0.3rem;">$${Math.round(val)}</div>
+        <div style="font-size:0.75rem; font-weight:bold; color:var(--color-text-bright); margin-bottom:0.3rem;">$${Math.round(val)}</div>
         <div style="width:100%; flex:1; background:linear-gradient(to top, ${color} 0%, rgba(255,255,255,0.1) 100%); border-radius:4px 4px 0 0; border:1px solid ${color}; box-shadow:0 0 10px ${color}33;"></div>
       `;
       salesChart.appendChild(bar);
@@ -3501,7 +2819,7 @@ function renderAiAnalytics() {
   const stockValues = Object.values(stockMap);
   
   if (stockKeys.length === 0) {
-    stockChart.innerHTML = `<div style="margin:auto; color:#aaa; font-size:0.85rem;">Нет данных о складе</div>`;
+    stockChart.innerHTML = `<div style="margin:auto; color:var(--color-muted); font-size:0.85rem;">No warehouse data</div>`;
   } else {
     const maxStock = Math.max(...stockValues, 1);
     const colors = ["#00e676", "#00b0ff", "#ffb300", "#ff5500", "#ff4081", "#d500f9"];
@@ -3520,10 +2838,10 @@ function renderAiAnalytics() {
       bar.style.justifyContent = "flex-end";
       bar.style.position = "relative";
       bar.style.cursor = "pointer";
-      bar.title = `${key}: ${val} шт.`;
+      bar.title = `${key}: ${val} pcs`;
       
       bar.innerHTML = `
-        <div style="font-size:0.75rem; font-weight:bold; color:#fff; margin-bottom:0.3rem;">${val} шт</div>
+        <div style="font-size:0.75rem; font-weight:bold; color:var(--color-text-bright); margin-bottom:0.3rem;">${val} pcs</div>
         <div style="width:100%; flex:1; background:linear-gradient(to top, ${color} 0%, rgba(255,255,255,0.1) 100%); border-radius:4px 4px 0 0; border:1px solid ${color}; box-shadow:0 0 10px ${color}33;"></div>
       `;
       stockChart.appendChild(bar);
@@ -3534,7 +2852,7 @@ function renderAiAnalytics() {
       leg.style.gap = "0.3rem";
       leg.innerHTML = `
         <span style="display:inline-block; width:10px; height:10px; background:${color}; border-radius:50%;"></span>
-        <span>${key} (${val} ед.)</span>
+        <span>${key} (${val} units)</span>
       `;
       stockLegend.appendChild(leg);
     });
@@ -3618,18 +2936,18 @@ if (aiChatForm && aiChatInput && aiChatMessages) {
       let aiText = "";
       const lowerQuery = query.toLowerCase();
       
-      if (lowerQuery.includes("общ") || lowerQuery.includes("продаж") || lowerQuery.includes("анализ")) {
-        aiText = `### 📈 Общий анализ продаж и склада<br/>
-Здесь представлены агрегированные метрики вашего магазина:
-* **Всего совершено продаж:** ${totalSalesCount} шт. дисков.
-* **Общая полученная выручка:** $${totalRevenue.toFixed(2)}
-* **Всего товаров в каталоге:** ${totalProductsCount} наименований.
-* **В дефиците (под заказ):** ${outOfStockCount} позиций.
-* **Скрыто (черновики):** ${hiddenDraftsCount} позиций.
+      if (lowerQuery.includes("total") || lowerQuery.includes("sales") || lowerQuery.includes("analysis")) {
+        aiText = `### 📈 Total sales and warehouse analysis<br/>
+Here are the aggregated metrics of your store:
+* **Total sales:** ${totalSalesCount} pcs discs.
+* **Total revenue received:** $${totalRevenue.toFixed(2)}
+* **Total products in catalog:** ${totalProductsCount} items.
+* **In deficit (on order):** ${outOfStockCount} items.
+* **Hidden (drafts):** ${hiddenDraftsCount} items.
 
-**Рекомендация ИИ:** Обратите внимание на ${outOfStockCount} позиций со статусом "Под заказ". Оперативное пополнение этих запасов увеличит вашу конверсию на 15-20%.`;
+**AI Recommendation:** Pay attention to ${outOfStockCount} items with status "On order". Promptly replenishing these stocks will increase your conversion by 15-20%.`;
       } 
-      else if (lowerQuery.includes("лидир") || lowerQuery.includes("производ") || lowerQuery.includes("мастер")) {
+      else if (lowerQuery.includes("lead") || lowerQuery.includes("prod") || lowerQuery.includes("master")) {
         let winner = "—";
         let maxRev = -1;
         let breakDown = "";
@@ -3643,38 +2961,38 @@ if (aiChatForm && aiChatInput && aiChatMessages) {
           breakDown += `* **${k}:** $${val.toFixed(2)}<br/>`;
         });
         
-        aiText = `### 🏭 Анализ эффективности производства<br/>
-Вот статистика выручки по мастерским:
-${breakDown || "*Нет зафиксированных продаж*<br/>"}
-🏆 Лидирующее производство: **${winner}** с суммарным результатом **$${Math.max(maxRev, 0).toFixed(2)}**.
+        aiText = `### 🏭 Production efficiency analysis<br/>
+Here is the revenue statistics by workshops:
+${breakDown || "*No recorded sales*<br/>"}
+🏆 Leading production: **${winner}** with total result **$${Math.max(maxRev, 0).toFixed(2)}**.
 
-**Рекомендация ИИ:** Лидер продаж демонстрирует высокую скорость обработки заказов. Перенимайте их опыт по логистике!`;
+**AI Recommendation:** The sales leader demonstrates high order processing speed. Adopt their logistics experience!`;
       }
-      else if (lowerQuery.includes("остат") || lowerQuery.includes("запас") || lowerQuery.includes("склад") || lowerQuery.includes("бренд")) {
+      else if (lowerQuery.includes("stock") || lowerQuery.includes("reserve") || lowerQuery.includes("warehouse") || lowerQuery.includes("brand")) {
         let stockList = "";
         Object.keys(brandStockMap).forEach(b => {
-          stockList += `* **${b}:** ${brandStockMap[b]} шт. в наличии.<br/>`;
+          stockList += `* **${b}:** ${brandStockMap[b]} pcs in stock.<br/>`;
         });
         
-        aiText = `### 📦 Аналитика запасов брендов<br/>
-Текущее распределение готовой продукции по маркам дисков на складе:
-${stockList || "*На складе отсутствуют товары в наличии*<br/>"}
+        aiText = `### 📦 Brand stock analytics<br/>
+Current distribution of finished products by disc brands in warehouse:
+${stockList || "*No products in stock in warehouse*<br/>"}
 
-**Предупреждение ИИ:** Если у какого-то бренда нулевой остаток, обязательно обновите его статус в Excel или карточках, чтобы не терять покупателей.`;
+**AI Warning:** If a brand has zero stock, be sure to update its status in Excel or cards to not lose buyers.`;
       }
       else {
-        aiText = `### 🤖 Ответ ИИ-Аналитика<br/>
-Я обработал ваш запрос: *"${query}"* с учетом активной роли **${userRole}** и ограничений производителя **${activeMfg}**.
+        aiText = `### 🤖 AI Analytics Response<br/>
+I processed your request: *"${query}"* considering the active role **${userRole}** and manufacturer restrictions **${activeMfg}**.
 
-**Краткая сводка:**
-* Текущая выручка: **$${totalRevenue.toFixed(2)}**
-* Всего товаров на складе: **${totalProductsCount} ед.**
-* Скрытых карточек-черновиков: **${hiddenDraftsCount} ед.**
+**Brief summary:**
+* Current revenue: **$${totalRevenue.toFixed(2)}**
+* Total products in warehouse: **${totalProductsCount} units**
+* Hidden draft cards: **${hiddenDraftsCount} units**
 
-Вы можете спросить меня:
-1. *"Сделай общий анализ продаж"*
-2. *"Какая мастерская лидирует?"*
-3. *"Каковы остатки на складе?"*`;
+You can ask me:
+1. *"Do a total sales analysis"*
+2. *"Which workshop leads?"*
+3. *"What is the stock in the warehouse?"*`;
       }
       
       const aiMsg = document.createElement("div");
@@ -3693,28 +3011,528 @@ ${stockList || "*На складе отсутствуют товары в нал
   });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  document.querySelectorAll(".excel-sel-edge").forEach(edge => {
-    edge.addEventListener("dragstart", (e) => {
-      if (!excelSelectedRange) {
-        e.preventDefault();
-        return;
-      }
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", "move_range");
-      excelMoveSourceRange = Object.assign({}, excelSelectedRange);
-      isExcelMoveMode = true;
-    });
-  });
+// Excel handlers removed
 
-  const autofillHandle = document.getElementById("excelAutofillHandle");
-  if (autofillHandle) {
-    autofillHandle.addEventListener("mousedown", (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      isExcelAutofilling = true;
-      excelAutofillTargetCells = [];
-      showToast(currentLang === 'ru' ? "Автозаполнение: Протяните курсор мыши вниз по колонке" : "Autofill: Drag your mouse down the column");
-    });
+// --- Article Management System (Rich blog articles) ---
+
+function renderArticlesList() {
+  if (!articlesTableBody) return;
+  
+  const allArticles = JSON.parse(localStorage.getItem("brakeRichArticles") || "[]");
+  const activeMfg = getActiveManufacturer();
+  
+  const filtered = allArticles.filter(art => {
+    if (userRole === "superadmin" && activeMfg === "all") return true;
+    const authorVal = art.author || "BrakeDiscs Official";
+    const resolvedActive = activeMfg === "all" ? "Garage1" : activeMfg;
+    return authorVal === resolvedActive;
+  });
+  
+  articlesTableBody.innerHTML = "";
+  if (filtered.length === 0) {
+    articlesTableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--color-muted);">No articles found. Click "+ Write Article" to create your first article!</td></tr>`;
+    return;
   }
+  
+  filtered.forEach(art => {
+    const tr = document.createElement("tr");
+    const imgUrl = art.image || "https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80";
+    
+    tr.innerHTML = `
+      <td><img src="${imgUrl}" style="width:80px; height:50px; object-fit:cover; border-radius:4px; border:1px solid var(--color-border);" /></td>
+      <td style="font-weight:bold; color:var(--color-text-bright);">${art.title}</td>
+      <td style="color:var(--color-muted);">${art.author || 'BrakeDiscs Official'}</td>
+      <td style="color:#888;">${new Date(art.createdAt).toLocaleDateString()}</td>
+      <td>
+        <div style="display:flex; gap:0.5rem;">
+          <button class="brand-btn edit-art-btn" data-id="${art.id}" style="padding:0.3rem 0.6rem; font-size:0.8rem; background:#00b0ff; border:none; color:#fff;">Edit</button>
+          <button class="brand-btn delete-art-btn" data-id="${art.id}" style="padding:0.3rem 0.6rem; font-size:0.8rem; background:#ff5252; border:none; color:#fff;">Delete</button>
+        </div>
+      </td>
+    `;
+    
+    tr.querySelector(".edit-art-btn").addEventListener("click", () => openEditArticleModal(art));
+    tr.querySelector(".delete-art-btn").addEventListener("click", () => deleteArticle(art.id));
+    
+    articlesTableBody.appendChild(tr);
+  });
+}
+
+function openEditArticleModal(art) {
+  if (!articleEditModal) return;
+  
+  if (art) {
+    articleModalTitle.textContent = "Edit Article";
+    editArticleId.value = art.id;
+    articleTitleInput.value = art.title;
+    articleImageInput.value = art.image || "";
+    articleImagePreview.src = art.image || "https://via.placeholder.com/60?text=+";
+    articleVideoInput.value = art.video || "";
+    articleContentInput.value = art.content || "";
+  } else {
+    articleModalTitle.textContent = "Write Article";
+    editArticleId.value = "";
+    articleTitleInput.value = "";
+    articleImageInput.value = "";
+    articleImagePreview.src = "https://via.placeholder.com/60?text=+";
+    articleVideoInput.value = "";
+    articleContentInput.value = "";
+  }
+  
+  articleEditModal.style.display = "flex";
+}
+
+function deleteArticle(id) {
+  if (!confirm("Are you sure you want to delete this article?")) return;
+  const allArticles = JSON.parse(localStorage.getItem("brakeRichArticles") || "[]");
+  const filtered = allArticles.filter(art => art.id !== id);
+  localStorage.setItem("brakeRichArticles", JSON.stringify(filtered));
+  showToast("Article successfully deleted!");
+  renderArticlesList();
+}
+
+if (openAddArticleModalBtn) {
+  openAddArticleModalBtn.addEventListener("click", () => openEditArticleModal(null));
+}
+
+if (closeArticleModalBtn && articleEditModal) {
+  closeArticleModalBtn.addEventListener("click", () => {
+    articleEditModal.style.display = "none";
+  });
+}
+
+if (articleEditForm) {
+  articleEditForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const allArticles = JSON.parse(localStorage.getItem("brakeRichArticles") || "[]");
+    const activeMfg = getActiveManufacturer();
+    const resolvedAuthor = activeMfg === "all" ? "Garage1" : activeMfg;
+    
+    const artId = editArticleId.value ? Number(editArticleId.value) : Date.now();
+    const titleVal = articleTitleInput.value.trim();
+    const imageVal = articleImageInput.value.trim();
+    const videoVal = articleVideoInput.value.trim();
+    const contentVal = articleContentInput.value.trim();
+    
+    const articleData = {
+      id: artId,
+      title: titleVal,
+      image: imageVal,
+      video: videoVal,
+      content: contentVal,
+      author: resolvedAuthor,
+      createdAt: new Date().toISOString()
+    };
+    
+    if (editArticleId.value) {
+      const idx = allArticles.findIndex(a => a.id === artId);
+      if (idx !== -1) {
+        articleData.author = allArticles[idx].author; // Preserve original author
+        articleData.createdAt = allArticles[idx].createdAt; // Preserve original date
+        allArticles[idx] = articleData;
+      }
+    } else {
+      allArticles.push(articleData);
+    }
+    
+    localStorage.setItem("brakeRichArticles", JSON.stringify(allArticles));
+    showToast(editArticleId.value ? "Article updated successfully!" : "Article published successfully!");
+    articleEditModal.style.display = "none";
+    renderArticlesList();
+  });
+}
+
+// Hook format buttons inside the text editor
+document.querySelectorAll(".format-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const tag = btn.dataset.tag;
+    const start = articleContentInput.selectionStart;
+    const end = articleContentInput.selectionEnd;
+    const text = articleContentInput.value;
+    const selected = text.substring(start, end);
+    
+    let replacement = "";
+    if (tag === "h3") replacement = `<h3>${selected || 'Heading'}</h3>`;
+    else if (tag === "p") replacement = `<p>${selected || 'Paragraph text'}</p>`;
+    else if (tag === "bold") replacement = `<strong>${selected || 'Bold text'}</strong>`;
+    else if (tag === "img") replacement = `<img src="${selected || 'https://example.com/image.jpg'}" style="max-width:100%; border-radius:var(--radius); margin:1rem 0;" />`;
+    else if (tag === "youtube") replacement = `<iframe width="100%" height="315" src="${selected || 'https://www.youtube.com/embed/dQw4w9WgXcQ'}" frameborder="0" allowfullscreen></iframe>`;
+    
+    articleContentInput.value = text.substring(0, start) + replacement + text.substring(end);
+    articleContentInput.focus();
+  });
 });
+
+if (articleImagePreview && articleImageFile) {
+  articleImagePreview.addEventListener("click", () => articleImageFile.click());
+  articleImageFile.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const r = new FileReader();
+      r.onload = (event) => {
+        articleImagePreview.src = event.target.result;
+        articleImageInput.value = event.target.result;
+      };
+      r.readAsDataURL(file);
+    }
+  });
+}
+
+// --- AI Features ---
+const aiExcelImportBtn = document.getElementById("aiExcelImportBtn");
+const aiUrlScrapeBtn = document.getElementById("aiUrlScrapeBtn");
+const aiExcelModal = document.getElementById("aiExcelModal");
+const aiUrlModal = document.getElementById("aiUrlModal");
+const aiExcelCloseBtn = document.getElementById("aiExcelCloseBtn");
+const aiUrlCloseBtn = document.getElementById("aiUrlCloseBtn");
+
+// AI Excel Import Logic
+const aiExcelStartBtn = document.getElementById("aiExcelStartBtn");
+const aiExcelFileInput = document.getElementById("aiExcelFileInput");
+const aiExcelProgressArea = document.getElementById("aiExcelProgressArea");
+const aiExcelProgressBar = document.getElementById("aiExcelProgressBar");
+const aiExcelStatusText = document.getElementById("aiExcelStatusText");
+
+if (aiExcelImportBtn) {
+  aiExcelImportBtn.addEventListener("click", () => {
+    aiExcelFileInput.value = "";
+    aiExcelProgressArea.style.display = "none";
+    aiExcelModal.style.display = "flex";
+  });
+}
+if (aiExcelCloseBtn) {
+  aiExcelCloseBtn.addEventListener("click", () => aiExcelModal.style.display = "none");
+}
+
+if (aiExcelStartBtn) {
+  aiExcelStartBtn.addEventListener("click", () => {
+    const file = aiExcelFileInput.files[0];
+    if (!file) return showToast("Please select an Excel or CSV file first.", false);
+    
+    aiExcelProgressArea.style.display = "block";
+    aiExcelProgressBar.style.width = "10%";
+    aiExcelStatusText.textContent = "AI is reading file structure...";
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setTimeout(() => {
+        aiExcelProgressBar.style.width = "40%";
+        aiExcelStatusText.textContent = "AI analyzing columns and mapping data...";
+        try {
+          const data = new Uint8Array(e.target.result);
+          // Assuming XLSX is loaded globally via CDN
+          const workbook = XLSX.read(data, {type: 'array'});
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+          
+          if (json.length < 2) throw new Error("Empty file");
+          
+          // Heuristics mapping (AI simulation)
+          setTimeout(() => {
+             aiExcelProgressBar.style.width = "80%";
+             aiExcelStatusText.textContent = "AI generating drafts...";
+             
+             let added = 0;
+             const mfg = getActiveManufacturer() !== "all" ? getActiveManufacturer() : "Garage1";
+             
+             // Very basic AI column mapping simulation
+             // Assuming typical columns: Name, Brand, Price, Stock
+             for(let i=1; i<json.length; i++) {
+               const row = json[i];
+               if(!row || !row[0]) continue;
+               
+               const name = String(row[0]);
+               const brand = String(row[1] || "Unknown");
+               const price = parseFloat(row[2]) || 0;
+               const stockCount = parseInt(row[3]) || 0;
+               
+               const newProduct = {
+                 id: "ai_" + Date.now() + "_" + i,
+                 name: name,
+                 brand: brand,
+                 price: price,
+                 stock: stockCount > 0,
+                 stockCount: stockCount > 0 ? stockCount : undefined,
+                 manufacturer: mfg,
+                 visible: false, // draft state
+                 image: "https://via.placeholder.com/300?text=AI+Draft"
+               };
+               products.unshift(newProduct);
+               added++;
+             }
+             
+             localStorage.setItem("brakeProducts", JSON.stringify(products));
+             
+             setTimeout(() => {
+               aiExcelProgressBar.style.width = "100%";
+               aiExcelStatusText.textContent = "Complete!";
+               setTimeout(() => {
+                 aiExcelModal.style.display = "none";
+                 showToast(`AI successfully parsed ${added} products into drafts!`);
+                 loadProducts(); // Refresh table
+               }, 1000);
+             }, 800);
+             
+          }, 1500);
+          
+        } catch (err) {
+          aiExcelStatusText.textContent = "Error parsing file.";
+          console.error(err);
+        }
+      }, 1000);
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// AI URL Scraper Logic
+const aiUrlStartBtn = document.getElementById("aiUrlStartBtn");
+const aiUrlInput = document.getElementById("aiUrlInput");
+const aiUrlProgressArea = document.getElementById("aiUrlProgressArea");
+const aiUrlProgressBar = document.getElementById("aiUrlProgressBar");
+const aiUrlStatusText = document.getElementById("aiUrlStatusText");
+
+if (aiUrlScrapeBtn) {
+  aiUrlScrapeBtn.addEventListener("click", () => {
+    aiUrlInput.value = "";
+    aiUrlProgressArea.style.display = "none";
+    aiUrlProgressBar.style.background = "linear-gradient(90deg, #00b09b, #96c93d)";
+    aiUrlModal.style.display = "flex";
+  });
+}
+if (aiUrlCloseBtn) {
+  aiUrlCloseBtn.addEventListener("click", () => aiUrlModal.style.display = "none");
+}
+
+if (aiUrlStartBtn) {
+  aiUrlStartBtn.addEventListener("click", () => {
+    const url = aiUrlInput.value.trim();
+    if (!url) return showToast("Please enter a valid URL.", false);
+    
+    aiUrlProgressArea.style.display = "block";
+    aiUrlProgressBar.style.width = "15%";
+    aiUrlStatusText.textContent = "AI is fetching web page...";
+    
+    // Use allorigins to bypass CORS
+    fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.contents) throw new Error("No contents");
+        
+        aiUrlProgressBar.style.width = "50%";
+        aiUrlStatusText.textContent = "AI is analyzing HTML structure & images...";
+        
+        setTimeout(() => {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(data.contents, "text/html");
+          
+          let title = doc.querySelector("title")?.textContent || "Scraped Product";
+          let image = doc.querySelector("meta[property='og:image']")?.content;
+          if (!image) {
+            const firstImg = doc.querySelector("img");
+            image = firstImg ? firstImg.src : "https://via.placeholder.com/300?text=AI+Draft";
+          }
+          let desc = doc.querySelector("meta[name='description']")?.content || "";
+          
+          aiUrlProgressBar.style.width = "85%";
+          aiUrlStatusText.textContent = "AI generating SEO description and mapping fields...";
+          
+          setTimeout(() => {
+            const mfg = getActiveManufacturer() !== "all" ? getActiveManufacturer() : "Garage1";
+            const newProduct = {
+               id: "ai_scrape_" + Date.now(),
+               name: title.trim().substring(0, 100),
+               brand: "AI Brand",
+               price: 0,
+               stock: false,
+               manufacturer: mfg,
+               visible: false, // draft
+               image: image,
+               description: "AI Generated Description: " + desc
+            };
+            
+            products.unshift(newProduct);
+            localStorage.setItem("brakeProducts", JSON.stringify(products));
+            
+            aiUrlProgressBar.style.width = "100%";
+            aiUrlStatusText.textContent = "Product card generated!";
+            
+            setTimeout(() => {
+              aiUrlModal.style.display = "none";
+              showToast("AI created draft product from URL!");
+              loadProducts();
+              
+              // Automatically open the edit modal for the generated product
+              openEditModal(newProduct, (updated) => {
+                const uIdx = products.findIndex(x => x.id === newProduct.id);
+                if (uIdx !== -1) {
+                  products[uIdx] = Object.assign(products[uIdx], updated);
+                  
+                  if (updated.newMotos) {
+                    if (!products[uIdx].groupId) {
+                      products[uIdx].groupId = "g_" + Date.now();
+                    }
+                    updated.newMotos.forEach(motoName => {
+                      const clone = JSON.parse(JSON.stringify(products[uIdx]));
+                      clone.id = Date.now() + Math.floor(Math.random() * 10000);
+                      clone.name = motoName;
+                      clone.motos = [motoName];
+                      clone.isClone = true;
+                      products.push(clone);
+                    });
+                    delete products[uIdx].newMotos;
+                  }
+                  
+                  localStorage.setItem("brakeProducts", JSON.stringify(products));
+                  loadProducts();
+                  showToast("Product updated!");
+                }
+              });
+            }, 1000);
+          }, 1500);
+        }, 1000);
+      })
+      .catch(err => {
+        console.warn("AI Scraping blocked or failed, generating fallback draft.", err);
+        aiUrlStatusText.textContent = "Website is blocking requests. Generating manual draft...";
+        aiUrlProgressBar.style.width = "100%";
+        
+        setTimeout(() => {
+          const mfg = getActiveManufacturer() !== "all" ? getActiveManufacturer() : "Garage1";
+          const newProduct = {
+             id: "ai_scrape_" + Date.now(),
+             name: "Scraped Product (Manual Edit Required)",
+             brand: "AI Brand",
+             price: 0,
+             stock: false,
+             manufacturer: mfg,
+             visible: false,
+             image: "https://via.placeholder.com/300?text=AI+Draft",
+             description: "Failed to auto-scrape from URL: " + url + "\n\nPlease fill in manually."
+          };
+          
+          products.unshift(newProduct);
+          localStorage.setItem("brakeProducts", JSON.stringify(products));
+          
+          aiUrlModal.style.display = "none";
+          showToast("Generated fallback draft product.");
+          loadProducts();
+          
+          // Automatically open the edit modal for the generated product
+          openEditModal(newProduct, (updated) => {
+            const uIdx = products.findIndex(x => x.id === newProduct.id);
+            if (uIdx !== -1) {
+              products[uIdx] = Object.assign(products[uIdx], updated);
+              
+              if (updated.newMotos) {
+                if (!products[uIdx].groupId) {
+                  products[uIdx].groupId = "g_" + Date.now();
+                }
+                updated.newMotos.forEach(motoName => {
+                  const clone = JSON.parse(JSON.stringify(products[uIdx]));
+                  clone.id = Date.now() + Math.floor(Math.random() * 10000);
+                  clone.name = motoName;
+                  clone.motos = [motoName];
+                  clone.isClone = true;
+                  products.push(clone);
+                });
+                delete products[uIdx].newMotos;
+              }
+              
+              localStorage.setItem("brakeProducts", JSON.stringify(products));
+              loadProducts();
+              showToast("Product updated!");
+            }
+          });
+        }, 1000);
+      });
+  });
+}
+
+// --- SEO Export Logic ---
+const exportSeoBtn = document.getElementById("exportSeoBtn");
+if (exportSeoBtn) {
+  exportSeoBtn.addEventListener("click", async () => {
+    exportSeoBtn.textContent = "⏳ Generating...";
+    exportSeoBtn.disabled = true;
+    
+    try {
+      const zip = new JSZip();
+      const imgFolder = zip.folder("images");
+      
+      const exportedProducts = JSON.parse(JSON.stringify(products));
+      
+      // Helper to convert base64 to blob
+      const base64ToBlob = (b64Data) => {
+        const parts = b64Data.split(',');
+        const mime = parts[0].match(/:(.*?);/)[1];
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while(n--){
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new Blob([u8arr], {type: mime});
+      };
+
+      for (const p of exportedProducts) {
+        // Ensure slug
+        if (!p.slug) {
+          p.slug = generateSlug(p.name);
+        }
+        
+        // Handle main image
+        if (p.image && p.image.startsWith("data:image")) {
+          try {
+            const blob = base64ToBlob(p.image);
+            const ext = blob.type.split('/')[1] || "jpg";
+            const filename = `${p.slug}-main.${ext}`;
+            imgFolder.file(filename, blob);
+            p.image = `/assets/images/${filename}`;
+          } catch(e) {
+            console.error("Failed to process main image for", p.name, e);
+          }
+        }
+        
+        // Handle gallery
+        if (p.gallery && Array.isArray(p.gallery)) {
+          const newGallery = [];
+          for (let i = 0; i < p.gallery.length; i++) {
+            const gImg = p.gallery[i];
+            if (gImg.startsWith("data:image")) {
+               try {
+                 const blob = base64ToBlob(gImg);
+                 const ext = blob.type.split('/')[1] || "jpg";
+                 const filename = `${p.slug}-gallery-${i + 1}.${ext}`;
+                 imgFolder.file(filename, blob);
+                 newGallery.push(`/assets/images/${filename}`);
+               } catch(e) {
+                 console.error("Failed to process gallery image", i, "for", p.name, e);
+                 newGallery.push(gImg);
+               }
+            } else {
+               newGallery.push(gImg);
+            }
+          }
+          p.gallery = newGallery;
+        }
+      }
+      
+      // Save updated products array back to JSON
+      zip.file("products.json", JSON.stringify(exportedProducts, null, 2));
+      
+      // Generate ZIP and trigger download
+      const content = await zip.generateAsync({type:"blob"});
+      saveAs(content, "BrakeDisks_SEO_Production.zip");
+      
+      showToast("✅ SEO Data exported successfully!");
+    } catch (err) {
+      console.error(err);
+      showToast("❌ Failed to export data", false);
+    } finally {
+      exportSeoBtn.textContent = "📦 Export SEO Data";
+      exportSeoBtn.disabled = false;
+    }
+  });
+}

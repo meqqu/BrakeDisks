@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About Us — MotoBrake Discs</title>
+  <meta name="description" content="About MotoBrake Discs" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+  <style>
+    .about-container { max-width: 800px; margin: 3rem auto; padding: 2rem; background: var(--color-surface); border-radius: var(--radius-lg); border: 1px solid var(--color-border-light); box-shadow: var(--shadow); }
+    .about-title { color: var(--color-primary-start); margin-bottom: 1.5rem; font-size: 2rem; text-align: center; }
+    .about-content { color: var(--color-text); line-height: 1.8; font-size: 1.1rem; }
+    .editor-section { display: none; margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--color-border); }
+    .editor-input, .editor-textarea { width: 100%; padding: 0.8rem; margin-bottom: 1rem; background: var(--color-input-bg); border: 1px solid var(--color-border-strong); color: var(--color-text-bright); border-radius: var(--radius-sm); font-family: inherit; }
+    .editor-textarea { min-height: 200px; resize: vertical; }
+  </style>
+</head>
+<body>
+  <div id="toastNotification" class="toast-notification">
+    <span id="toastIcon">🔔</span>
+    <span id="toastText">Notification</span>
+  </div>
+
+  <header class="header">
+    <div style="display:flex; align-items:center; gap:0.5rem;">
+      <h1 class="logo">🏍️ MotoBrake <span class="logo-sub">Discs</span></h1>
+    </div>
+    <nav class="nav" style="margin-left:auto;">
+      <a href="/index.html" class="nav-link">← Return to Shop</a>
+      <button class="nav-link" id="themeToggleBtn" title="Toggle Theme" onclick="toggleTheme()">🌓</button>
+      
+      <div class="user-menu" style="position: relative;">
+        <button class="nav-link" id="userMenuBtn" title="Profile">
+          <span id="userMenuText">Sign In</span>
+          <span>👤</span>
+        </button>
+        <div id="userDropdown" class="user-dropdown" style="display:none;">
+          <div id="userInfo" class="dropdown-header" style="display:none;">Hello, Guest</div>
+          <button id="openLoginBtn"  class="dropdown-item" style="display:none;">Sign In / Register</button>
+          <a href="/index.html" class="dropdown-item" id="shopNav" style="display:none; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">🛒 Back to Shop</a>
+          <a href="/account.html" class="dropdown-item" id="accountNav" style="display:none; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">👤 Profile</a>
+          <a href="/admin.html" class="dropdown-item admin-link" id="adminNav" style="display:none; color:var(--color-primary-start); padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">🏭 Warehouse</a>
+          <a href="/articles.html" class="dropdown-item" id="navArticles" style="display:none; color:#ff007f; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">📝 Articles</a>
+          <a href="/users.html" class="dropdown-item" id="navUsers" style="display:none; color:#00b0ff; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">👤 Users</a>
+          <a href="/settings.html" class="dropdown-item" id="navSettings" style="display:none; color:#00e676; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">⚙️ Site Settings</a>
+          <button id="logoutBtn"  class="dropdown-item" style="display:none;">Logout</button>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <main class="main">
+    <div class="about-container">
+      <button id="toggleEditBtn" class="primary-btn" style="display: none; margin-bottom: 2rem;">✏️ Edit About Us (Superuser)</button>
+      
+      <div id="readView">
+        <h2 class="about-title" id="displayTitle">About Us</h2>
+        <div class="about-content" id="displayContent">Loading...</div>
+      </div>
+
+      <div id="editView" class="editor-section">
+        <h3 style="margin-bottom: 1rem; color: var(--color-primary-start);">Editing Article</h3>
+        <label style="color:var(--color-muted); font-size:0.9rem;">Title (RU)</label>
+        <input type="text" id="editTitleRu" class="editor-input" placeholder="О нас">
+        <label style="color:var(--color-muted); font-size:0.9rem;">Title (EN)</label>
+        <input type="text" id="editTitleEn" class="editor-input" placeholder="About Us">
+        <label style="color:var(--color-muted); font-size:0.9rem;">Content (RU) - HTML allowed</label>
+        <textarea id="editContentRu" class="editor-textarea" placeholder="<p>Текст о компании...</p>"></textarea>
+        <label style="color:var(--color-muted); font-size:0.9rem;">Content (EN) - HTML allowed</label>
+        <textarea id="editContentEn" class="editor-textarea" placeholder="<p>Company details...</p>"></textarea>
+        <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+          <button id="saveAboutBtn" class="primary-btn" style="flex:1;">💾 Save Article</button>
+          <button id="cancelEditBtn" class="secondary-btn" style="flex:1;">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="/auth.js"></script>
+  <script>
+    function toggleTheme() {
+      const root = document.documentElement;
+      const newTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+    }
+    
+    document.addEventListener("DOMContentLoaded", () => {
+      const defaultArticle = {
+        title_ru: "О нас",
+        title_en: "About Us",
+        content_ru: "<p>Добро пожаловать в Brake Discs Store! Мы являемся премиальным производителем и дистрибьютором тормозных дисков для спортивных и уличных мотоциклов.</p><p>Наша цель - обеспечить вашу безопасность и комфорт на любой трассе.</p>",
+        content_en: "<p>Welcome to Brake Discs Store! We are a premium manufacturer and distributor of brake discs for sport and street motorcycles.</p><p>Our goal is to ensure your safety and comfort on any track.</p>"
+      };
+
+      const role = localStorage.getItem("brakeRole");
+      const toggleEditBtn = document.getElementById("toggleEditBtn");
+      const readView = document.getElementById("readView");
+      const editView = document.getElementById("editView");
+      
+      const displayTitle = document.getElementById("displayTitle");
+      const displayContent = document.getElementById("displayContent");
+      
+      const editTitleRu = document.getElementById("editTitleRu");
+      const editTitleEn = document.getElementById("editTitleEn");
+      const editContentRu = document.getElementById("editContentRu");
+      const editContentEn = document.getElementById("editContentEn");
+      
+      if (role === "superadmin") {
+        toggleEditBtn.style.display = "inline-block";
+      }
+
+      function loadArticle() {
+        const saved = JSON.parse(localStorage.getItem("brakeAboutArticle") || "null");
+        const article = saved || defaultArticle;
+        
+        displayTitle.textContent = article.title_en || article.title_ru;
+        displayContent.innerHTML = article.content_en || article.content_ru;
+        
+        editTitleRu.value = article.title_ru || "";
+        editTitleEn.value = article.title_en || "";
+        editContentRu.value = article.content_ru || "";
+        editContentEn.value = article.content_en || "";
+      }
+
+      toggleEditBtn.addEventListener("click", () => {
+        readView.style.display = "none";
+        editView.style.display = "block";
+        toggleEditBtn.style.display = "none";
+      });
+
+      document.getElementById("cancelEditBtn").addEventListener("click", () => {
+        readView.style.display = "block";
+        editView.style.display = "none";
+        toggleEditBtn.style.display = "inline-block";
+      });
+
+      document.getElementById("saveAboutBtn").addEventListener("click", () => {
+        const updated = {
+          title_ru: editTitleRu.value.trim(),
+          title_en: editTitleEn.value.trim(),
+          content_ru: editContentRu.value.trim(),
+          content_en: editContentEn.value.trim()
+        };
+        localStorage.setItem("brakeAboutArticle", JSON.stringify(updated));
+        
+        const toast = document.getElementById("toastNotification");
+        const toastText = document.getElementById("toastText");
+        const toastIcon = document.getElementById("toastIcon");
+        toastText.textContent = "About Us article successfully updated!";
+        toastIcon.textContent = "✅";
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 3000);
+        
+        loadArticle();
+        readView.style.display = "block";
+        editView.style.display = "none";
+        toggleEditBtn.style.display = "inline-block";
+      });
+
+      loadArticle();
+    });
+  </script>
+</body>
+</html>

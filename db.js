@@ -31,7 +31,7 @@ export function setJSON(key, value) {
 }
 
 // --- Users ---
-/** Ensure built-in accounts (admin) always exist, without wiping user-registered accounts */
+/** Ensure built-in accounts (admin) always exist, and migrate orders to sequential IDs */
 export function ensureDefaultUsers() {
   let allUsers = getJSON(KEYS.users, []);
 
@@ -48,6 +48,20 @@ export function ensureDefaultUsers() {
   }
 
   setJSON(KEYS.users, allUsers);
+
+  // Migrate orders to sequential IDs if needed
+  let orders = getJSON(KEYS.orders, []);
+  let migrated = false;
+  orders.forEach((o, index) => {
+    if (Number(o.id) > 10000000000) {
+      o.id = index + 1;
+      migrated = true;
+    }
+  });
+  if (migrated) {
+    setJSON(KEYS.orders, orders);
+  }
+
   return allUsers;
 }
 

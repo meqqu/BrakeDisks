@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>👥 Users & Manufacturers — Brake Discs Store</title>
+  <meta name="description" content="Users & Manufacturers management panel for the Brake Discs Store." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+</head>
+<body>
+  <div id="toastNotification" class="toast-notification">
+    <span id="toastIcon">🔔</span>
+    <span id="toastText">Notification</span>
+  </div>
+
+  <header class="header">
+    <h1 class="logo">👥 Users & Manufacturers</h1>
+    <nav class="nav" style="display: flex; align-items: center; gap: 1rem;">
+      <a href="/index.html" class="nav-link" id="backToStore">← Return to Shop</a>
+      <div class="user-menu" style="position: relative;">
+        <button class="nav-link" id="userMenuBtn" title="Profile">
+          <span id="userMenuText">Sign In</span>
+          <span>👤</span>
+        </button>
+                <div id="userDropdown" class="user-dropdown" style="display:none;">
+          <div id="userInfo" class="dropdown-header" style="display:none;">Hello, Guest</div>
+          <button id="openLoginBtn"  class="dropdown-item" style="display:none;">Sign In / Register</button>
+          <a href="/account.html" class="dropdown-item" id="accountNav" style="display:none; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">👤 Profile</a>
+          <a href="/admin.html" class="dropdown-item admin-link" id="adminNav" style="display:none; color:var(--color-primary-start); padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">🏭 Warehouse</a>
+          <a href="/articles.html" class="dropdown-item" id="navArticles" style="display:none; color:#ff007f; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">📝 Articles</a>
+          <a href="/users.html" class="dropdown-item" id="navUsers" style="display:none; color:#00b0ff; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">👤 Users</a>
+          <a href="/settings.html" class="dropdown-item" id="navSettings" style="display:none; color:#00e676; padding: 0.6rem 0.8rem; text-decoration: none; border-radius: var(--radius); cursor: pointer; background: none; border: none; text-align: left; font-size: 0.95rem;">⚙️ Site Settings</a>
+          <button id="logoutBtn"  class="dropdown-item" style="display:none;">Logout</button>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <main class="main">
+    <section class="admin-section" id="adminSection">
+
+      <div id="producersTab" style="display:block;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
+          <div>
+            <h2 style="color:var(--color-primary-start); margin:0;">👥 Users &amp; Manufacturers</h2>
+            <p style="font-size:0.85rem; color:var(--color-muted); margin:0.3rem 0 0 0;">Manage all platform accounts: manufacturers (admins) and regular buyers.</p>
+          </div>
+          <div style="display:flex; gap:0.5rem;">
+            <button id="openAddProducerModalBtn" style="padding:0.6rem 1rem; background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; border-radius:var(--radius); cursor:pointer; font-weight:bold;">+ Manufacturer</button>
+            <button id="openAddUserModalBtn" style="padding:0.6rem 1rem; background:linear-gradient(135deg, #7c3aed, #4f46e5); color:#fff; border:none; border-radius:var(--radius); cursor:pointer; font-weight:bold;">+ User</button>
+          </div>
+        </div>
+
+        <!-- Sub-tabs -->
+        <div style="display:flex; gap:0.5rem; margin-bottom:1.5rem; border-bottom:1px solid var(--color-muted); padding-bottom:0.5rem;">
+          <button id="subTabProducersBtn" style="padding:0.5rem 1.2rem; border:none; background:var(--color-primary-start); color:#fff; border-radius:4px; font-weight:bold; cursor:pointer;">🏭 Manufacturers</button>
+          <button id="subTabUsersBtn" style="padding:0.5rem 1.2rem; border:none; background:var(--color-surface); color:var(--color-muted); border-radius:4px; font-weight:bold; cursor:pointer;">👤 Regular Users</button>
+        </div>
+
+        <!-- Manufacturers Table -->
+        <div id="subTabProducersContent" style="display:block;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>User (Login)</th>
+                <th>Company Name (Brand)</th>
+                <th>Password</th>
+                <th>Role</th>
+                <th style="width:250px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="producersTableBody">
+              <!-- Dynamically filled by admin.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Regular Users Table -->
+        <div id="subTabUsersContent" style="display:none;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>User (Login)</th>
+                <th>Password</th>
+                <th>Role</th>
+                <th style="width:250px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody">
+              <!-- Dynamically filled by admin.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Add Producer Modal -->
+  <div class="modal" id="addProducerModal" style="display:none;">
+    <div class="modal-content" style="max-width:400px;">
+      <h2 style="color:var(--color-primary-start); margin-bottom:1.2rem;">➕ New Manufacturer</h2>
+      <form id="addProducerForm" style="display:flex; flex-direction:column; gap:1rem;">
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted);">Admin Login</label>
+          <input type="text" id="prodUsername" required placeholder="garage2" style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright);" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted);">Password</label>
+          <input type="password" id="prodPassword" required placeholder="admin123" style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright);" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted);">Manufacturer Name (Brand)</label>
+          <input type="text" id="prodMfgName" required placeholder="Garage2 Racing" style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright);" />
+        </div>
+        <button type="submit" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:1rem; border-radius:var(--radius); cursor:pointer; font-weight:bold;">Create Manufacturer</button>
+        <button type="button" id="closeProducerModal" style="background:transparent; color:var(--color-text-bright); border:1px solid var(--color-border); padding:0.8rem; border-radius:var(--radius); cursor:pointer;">Cancel</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add User Modal -->
+  <div class="modal" id="addUserModal" style="display:none;">
+    <div class="modal-content" style="max-width:400px;">
+      <h2 style="color:#7c3aed; margin-bottom:1.2rem;">➕ New Regular User</h2>
+      <form id="addUserForm" style="display:flex; flex-direction:column; gap:1rem;">
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted);">Username (Login)</label>
+          <input type="text" id="userRegUsername" required placeholder="john_doe" style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright);" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted);">Password</label>
+          <input type="password" id="userRegPassword" required placeholder="userpassword" style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright);" />
+        </div>
+        <button type="submit" style="background:linear-gradient(135deg, #7c3aed, #4f46e5); color:#fff; border:none; padding:1rem; border-radius:var(--radius); cursor:pointer; font-weight:bold;">Create User</button>
+        <button type="button" id="closeUserModal" style="background:transparent; color:var(--color-text-bright); border:1px solid var(--color-border); padding:0.8rem; border-radius:var(--radius); cursor:pointer;">Cancel</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit User Modal -->
+  <div class="modal" id="editUserModal" style="display:none;">
+    <div class="modal-content" style="max-width:400px;">
+      <h2 id="editUserModalTitle" style="color:var(--color-primary-start); margin-bottom:1.2rem;">✏️ Edit Account</h2>
+      <form id="editUserForm" style="display:flex; flex-direction:column; gap:1rem;">
+        <input type="hidden" id="editUserOriginalUsername" />
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted);">Username (Login)</label>
+          <input type="text" id="editUserUsername" required style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright);" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted);">Password</label>
+          <input type="password" id="editUserPassword" required style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright);" />
+        </div>
+        <div id="editUserMfgContainer" style="display:none; flex-direction:column; gap:0.3rem;">
+          <label style="font-size:0.85rem; color:var(--color-muted);">Manufacturer Name (Brand)</label>
+          <input type="text" id="editUserMfgName" style="padding:0.8rem; border-radius:var(--radius); border:1px solid var(--color-border); background:var(--color-bg); color:var(--color-text-bright);" />
+        </div>
+        <button type="submit" style="background:linear-gradient(135deg, var(--color-primary-start), var(--color-primary-end)); color:#fff; border:none; padding:1rem; border-radius:var(--radius); cursor:pointer; font-weight:bold;">Save Changes</button>
+        <button type="button" id="closeEditUserModal" style="background:transparent; color:var(--color-text-bright); border:1px solid var(--color-border); padding:0.8rem; border-radius:var(--radius); cursor:pointer;">Cancel</button>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/admin.js?v=2"></script>
+  <script>
+    function toggleTheme() {
+      const root = document.documentElement;
+      const newTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+    }
+  </script>
+</body>
+</html>

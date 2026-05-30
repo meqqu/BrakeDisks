@@ -74,13 +74,13 @@ function showAddedToCartModal() {
     modal = document.createElement("div");
     modal.id = "addedToCartModal";
     modal.className = "modal";
-    modal.style.cssText = "display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; align-items:center; justify-content:center;";
+    modal.style.cssText = "display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--color-modal-bg); z-index:9999; align-items:center; justify-content:center;";
     modal.innerHTML = `
       <div class="modal-content" style="background:var(--color-surface); padding:2rem; border-radius:var(--radius); max-width:400px; width:100%; box-shadow:var(--shadow); text-align:center;">
-        <h2 style="color:#00c853; margin-top:0;">Товар добавлен в корзину</h2>
+        <h2 style="color:#00c853; margin-top:0;">Item added to cart</h2>
         <div style="display:flex; gap:1rem; margin-top:2rem;">
-          <button id="addedToCartContinueBtn" style="flex:1; padding:0.8rem; background:transparent; border:1px solid #444; color:#fff; border-radius:4px; cursor:pointer;">Продолжить</button>
-          <button id="addedToCartCheckoutBtn" style="flex:1; padding:0.8rem; background:var(--color-primary-start); border:none; color:#fff; border-radius:4px; cursor:pointer; font-weight:bold;">Оформить заказ</button>
+          <button id="addedToCartContinueBtn" style="flex:1; padding:0.8rem; background:transparent; border:1px solid var(--color-border); color:var(--color-text-bright); border-radius:4px; cursor:pointer;">Continue</button>
+          <button id="addedToCartCheckoutBtn" style="flex:1; padding:0.8rem; background:var(--color-primary-start); border:none; color:#fff; border-radius:4px; cursor:pointer; font-weight:bold;">Go to Checkout</button>
         </div>
       </div>
     `;

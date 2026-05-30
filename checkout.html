@@ -1,67 +1,80 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Оформление заказа – Brake Discs Store</title>
+  <title>Checkout – Brake Discs Store</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css" />
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
 </head>
 <body>
   <header class="header">
     <h1 class="logo">Brake Discs Store</h1>
     <nav class="nav" style="margin-left:auto;">
-      <a href="index.html" class="nav-link">← Вернуться в магазин</a>
+      <a href="index.html" class="nav-link">← Return to Shop</a>
     </nav>
   </header>
 
-  <main class="main" style="max-width:800px; margin:0 auto; display:flex; flex-direction:column; gap:2rem;">
-    <h2>Оформление заказа</h2>
+  <main class="main" style="max-width:1100px; margin:0 auto; padding:0 1rem; display:flex; flex-direction:column; gap:2rem; width:100%;">
+    <h2>Checkout</h2>
     
-    <div style="display:flex; gap:2rem; flex-wrap:wrap;">
-      <div style="flex:1; min-width:300px; background:var(--color-surface); padding:1.5rem; border-radius:var(--radius); box-shadow:var(--shadow);">
-        <h3>Данные для доставки</h3>
+    <div class="checkout-container">
+      <div class="checkout-section">
+        <h3>Shipping Information</h3>
         <form id="checkoutForm" style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
-          <div style="display:flex; gap:1rem; flex-wrap:nowrap; width:100%;">
-            <input type="text" id="chkFirstName" placeholder="Имя" required style="flex:1; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); width:100%; box-sizing:border-box;" />
-            <input type="text" id="chkLastName" placeholder="Фамилия" required style="flex:1; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); width:100%; box-sizing:border-box;" />
+          <div class="form-row">
+            <input type="text" id="chkFirstName" placeholder="First Name" required class="checkout-input" />
+            <input type="text" id="chkLastName" placeholder="Last Name" required class="checkout-input" />
           </div>
-          <input type="email" id="chkEmail" placeholder="Ваш Email (туда придет чек)" required style="width:100%; box-sizing:border-box; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text);" />
-          <input type="text" id="chkPhone" placeholder="Номер телефона" required style="width:100%; box-sizing:border-box; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text);" />
+          <input type="email" id="chkEmail" placeholder="Your Email (for receipt)" required class="checkout-input" />
+          <input type="text" id="chkPhone" placeholder="Phone Number" required class="checkout-input" />
           
-          <div style="display:flex; gap:1rem; flex-wrap:nowrap; width:100%;">
-            <input type="text" id="chkCountry" placeholder="Страна" required style="flex:1; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); width:100%; box-sizing:border-box;" />
-            <input type="text" id="chkCity" placeholder="Город" required style="flex:1; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); width:100%; box-sizing:border-box;" />
+          <div class="form-row">
+            <input type="text" id="chkCountry" placeholder="Country" required class="checkout-input" />
+            <input type="text" id="chkCity" placeholder="City" required class="checkout-input" />
           </div>
-          <div style="display:flex; gap:1rem; flex-wrap:nowrap; width:100%;">
-            <input type="text" id="chkStreet" placeholder="Улица" required style="flex:2; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); width:100%; box-sizing:border-box;" />
-            <input type="text" id="chkHouse" placeholder="Дом/Кв" required style="flex:1; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); width:100%; box-sizing:border-box;" />
-            <input type="text" id="chkZip" placeholder="ZIP Индекс" required style="flex:1; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); width:100%; box-sizing:border-box;" />
+          <div class="form-row-three">
+            <input type="text" id="chkStreet" placeholder="Street" required class="checkout-input" />
+            <input type="text" id="chkHouse" placeholder="Building/Apt" required class="checkout-input" />
+            <input type="text" id="chkZip" placeholder="ZIP Code" required class="checkout-input" />
           </div>
-          <select id="chkPreferredContact" required style="width:100%; box-sizing:border-box; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text);">
-            <option value="" disabled selected>Предпочтительный способ связи</option>
+          <select id="chkPreferredContact" required class="checkout-select">
+            <option value="" disabled selected>Preferred Contact Method</option>
             <option value="Telegram">Telegram</option>
             <option value="WhatsApp">WhatsApp</option>
             <option value="Email">Email</option>
-            <option value="Телефон">Телефон</option>
+            <option value="Phone">Phone</option>
             <option value="Facebook">Facebook</option>
           </select>
-          <input type="text" id="chkContactValue" placeholder="" style="display:none; width:100%; box-sizing:border-box; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text);" />
-          <textarea id="chkComment" rows="3" placeholder="Комментарий к заказу (необязательно)" style="width:100%; box-sizing:border-box; padding:0.6rem; border-radius:var(--radius); border:1px solid var(--color-muted); background:var(--color-bg); color:var(--color-text); resize:vertical;"></textarea>
+          <input type="text" id="chkContactValue" placeholder="" class="checkout-input" style="display:none;" />
+          <textarea id="chkComment" rows="3" placeholder="Order comment (optional)" class="checkout-textarea"></textarea>
         </form>
       </div>
       
-      <div style="flex:1; min-width:300px; background:var(--color-surface); padding:1.5rem; border-radius:var(--radius); box-shadow:var(--shadow);">
-        <h3>Ваш заказ</h3>
-        <div id="checkoutItems" style="margin-top:1rem; display:flex; flex-direction:column; gap:1rem;">
-          <!-- Items injected via JS -->
+      <div class="checkout-section" style="display:flex; flex-direction:column; justify-content:space-between;">
+        <div>
+          <h3>Your Order</h3>
+          <div id="checkoutItems" style="margin-top:1rem; display:flex; flex-direction:column; gap:1rem;">
+            <!-- Items injected via JS -->
+          </div>
         </div>
-        <div style="margin-top:2rem; padding-top:1rem; border-top:1px solid var(--color-muted); font-size:1.4rem; font-weight:bold; text-align:right;">
-          Итого: <span id="checkoutTotal">$0.00</span>
+        <div>
+          <div style="margin-top:2rem; padding-top:1rem; border-top:1px solid var(--color-muted); font-size:1.4rem; font-weight:bold; text-align:right;">
+            Total: <span id="checkoutTotal">$0.00</span>
+          </div>
+          
+          <button type="submit" form="checkoutForm" style="width:100%; padding:1rem; border:none; border-radius:var(--radius); background:var(--color-header-bg); color:var(--color-text-bright); font-weight:bold; font-size:1.1rem; cursor:pointer; margin-top:1.5rem; display:flex; align-items:center; justify-content:center; gap:0.5rem; box-shadow:0 4px 10px rgba(0,0,0,0.3);">
+            💳 Pay with Visa / Mastercard
+          </button>
         </div>
-        
-        <button type="submit" form="checkoutForm" style="width:100%; padding:1rem; border:none; border-radius:var(--radius); background:linear-gradient(135deg, #1a1f35, #2b3252); color:#fff; font-weight:bold; font-size:1.1rem; cursor:pointer; margin-top:1.5rem; display:flex; align-items:center; justify-content:center; gap:0.5rem; box-shadow:0 4px 10px rgba(0,0,0,0.3);">
-          💳 Оплата Visa / Mastercard
-        </button>
       </div>
     </div>
   </main>
@@ -69,13 +82,26 @@
   <!-- Success Modal -->
   <div class="modal" id="successModal" style="display:none;">
     <div class="modal-content" style="text-align:center;">
-      <h2 style="color:var(--color-primary-start); margin-bottom:1rem;">✅ Оплата прошла успешно!</h2>
-      <p style="margin-bottom:0.5rem;">Ваш заказ успешно оформлен и передан в обработку.</p>
-      <p style="margin-bottom:1.5rem; color:var(--color-muted); font-size:0.9rem;">Уведомление отправлено на ваш Email.</p>
-      <a href="index.html" class="checkout-btn" style="display:inline-block; padding:0.8rem 2rem;">Продолжить покупки</a>
+      <div style="font-size:3rem; margin-bottom:0.5rem;">🎉</div>
+      <h2 style="color:var(--color-primary-start); margin-bottom:0.5rem;">✅ Payment Successful!</h2>
+      <p style="font-size:1.2rem; margin-bottom:0.3rem;">Order <strong id="successOrderId">#0000</strong> placed</p>
+      <p style="margin-bottom:0.5rem;">Your order has been successfully placed and is being processed.</p>
+      <p style="margin-bottom:1.5rem; color:var(--color-muted); font-size:0.9rem;">A confirmation has been sent to your Email.</p>
+      <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+        <a href="index.html" class="checkout-btn" style="display:inline-block; padding:0.8rem 2rem;">Continue Shopping</a>
+        <a href="account.html" class="checkout-btn" style="display:inline-block; padding:0.8rem 2rem; background:linear-gradient(135deg, #43a047, #2e7d32);">📋 Go to My Orders</a>
+      </div>
     </div>
   </div>
 
-  <script type="module" src="/checkout.js?v=5"></script>
+  <script type="module" src="/checkout.js"></script>
+  <script>
+    function toggleTheme() {
+      const root = document.documentElement;
+      const newTheme = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+    }
+  </script>
 </body>
 </html>
